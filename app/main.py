@@ -1,3 +1,11 @@
+import sys
+from pathlib import Path
+
+# Permitir ejecucion tanto desde la raiz como desde dentro de /backend
+RAIZ_PROYECTO = Path(__file__).resolve().parent.parent.parent
+if str(RAIZ_PROYECTO) not in sys.path:
+    sys.path.insert(0, str(RAIZ_PROYECTO))
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.app.core.config import settings
