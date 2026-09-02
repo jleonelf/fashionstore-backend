@@ -12,6 +12,13 @@ from backend.app.schemas.usuario import (
     ActualizarEstadoDTO,
     UsuarioListadoDTO
 )
+from backend.app.schemas.organizacion import (
+    CiudadCrearDTO,
+    CiudadDTO,
+    SucursalCrearDTO,
+    SucursalDTO,
+    ConfigurarTarifasDeliveryDTO
+)
 
 __all__ = [
     "RegistroClienteDTO",
@@ -23,5 +30,10 @@ __all__ = [
     "UsuarioCrearDTO",
     "AsignarRolDTO",
     "ActualizarEstadoDTO",
-    "UsuarioListadoDTO"
+    "UsuarioListadoDTO",
+    "CiudadCrearDTO",
+    "CiudadDTO",
+    "SucursalCrearDTO",
+    "SucursalDTO",
+    "ConfigurarTarifasDeliveryDTO"
 ]

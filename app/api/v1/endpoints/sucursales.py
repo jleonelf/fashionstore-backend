@@ -1,0 +1,70 @@
+import uuid
+from typing import List, Optional
+from fastapi import APIRouter, Depends, status, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+from backend.app.core.database import get_db
+from backend.app.schemas.organizacion import (
+    SucursalCrearDTO,
+    SucursalDTO,
+    ConfigurarTarifasDeliveryDTO
+)
+from backend.app.services.sucursal_service import SucursalService
+
+router = APIRouter()
+
+@router.post(
+    "",
+    response_model=SucursalDTO,
+    status_code=status.HTTP_201_CREATED,
+    summary="Registrar nueva sucursal (CU03 / RF03)",
+    description="Permite al Administrador registrar una sucursal con su ubicación, anillo y parámetros de delivery."
+)
+async def registrarSucursal(
+    datos_sucursal: SucursalCrearDTO,
+    db: AsyncSession = Depends(get_db)
+) -> SucursalDTO:
+    servicio = SucursalService(db)
+    return await servicio.crear(datos_sucursal)
+
+@router.get(
+    "",
+    response_model=List[SucursalDTO],
+    status_code=status.HTTP_200_OK,
+    summary="Listar sucursales de la cadena (CU03 / RF03)",
+    description="Retorna las sucursales con opción de filtrar por ciudad_id."
+)
+async def gestionarSucursales(
+    ciudad_id: Optional[uuid.UUID] = Query(None, description="Filtrar sucursales por ID de ciudad"),
+    solo_activas: bool = True,
+    db: AsyncSession = Depends(get_db)
+) -> List[SucursalDTO]:
+    servicio = SucursalService(db)
+    return await servicio.listar(ciudad_id=ciudad_id, solo_activas=solo_activas)
+
+@router.get(
+    "/{sucursal_id}",
+    response_model=SucursalDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Obtener detalle de sucursal (CU03 / RF03)"
+)
+async def obtenerSucursalPorId(
+    sucursal_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db)
+) -> SucursalDTO:
+    servicio = SucursalService(db)
+    return await servicio.obtenerPorId(sucursal_id)
+
+@router.patch(
+    "/{sucursal_id}/tarifas",
+    response_model=SucursalDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Configurar tarifas y cobertura de delivery por anillos (CU03 / RF03)",
+    description="Actualiza la tarifa base, incremento por anillo y rango de cobertura de delivery para la sucursal."
+)
+async def configurarTarifasDelivery(
+    sucursal_id: uuid.UUID,
+    datos_tarifas: ConfigurarTarifasDeliveryDTO,
+    db: AsyncSession = Depends(get_db)
+) -> SucursalDTO:
+    servicio = SucursalService(db)
+    return await servicio.actualizarTarifas(sucursal_id, datos_tarifas)
