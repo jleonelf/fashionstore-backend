@@ -5,11 +5,23 @@ from backend.app.schemas.auth import (
     ClientePerfilDTO,
     TokenRespuestaDTO
 )
+from backend.app.schemas.usuario import (
+    RolDTO,
+    UsuarioCrearDTO,
+    AsignarRolDTO,
+    ActualizarEstadoDTO,
+    UsuarioListadoDTO
+)
 
 __all__ = [
     "RegistroClienteDTO",
     "LoginDTO",
     "UsuarioPerfilDTO",
     "ClientePerfilDTO",
-    "TokenRespuestaDTO"
+    "TokenRespuestaDTO",
+    "RolDTO",
+    "UsuarioCrearDTO",
+    "AsignarRolDTO",
+    "ActualizarEstadoDTO",
+    "UsuarioListadoDTO"
 ]
