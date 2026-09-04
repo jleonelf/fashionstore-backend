@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from backend.app.api.v1.endpoints import clientes, sesion, usuarios, roles, ciudades, sucursales, proveedores, recepciones, maestros, productos, variantes, catalogo
+from backend.app.api.v1.endpoints import clientes, sesion, usuarios, roles, ciudades, sucursales, proveedores, recepciones, maestros, productos, variantes, catalogo, inventario
 
 api_router = APIRouter()
 
@@ -11,6 +11,7 @@ api_router.include_router(ciudades.router, prefix="/ciudades", tags=["Ciudades"]
 api_router.include_router(sucursales.router, prefix="/sucursales", tags=["Sucursales y Delivery"])
 api_router.include_router(proveedores.router, prefix="/proveedores", tags=["Proveedores"])
 api_router.include_router(recepciones.router, prefix="/recepciones", tags=["Recepción de Lotes"])
+api_router.include_router(inventario.router, prefix="/inventario", tags=["Inventario Kardex CU07"])
 # CU05 - Maestros, Productos y Variantes
 api_router.include_router(maestros.router_tallas, prefix="/tallas", tags=["Maestros - Tallas"])
 api_router.include_router(maestros.router_colores, prefix="/colores", tags=["Maestros - Colores"])
