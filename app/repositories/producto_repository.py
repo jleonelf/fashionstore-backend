@@ -1,9 +1,9 @@
 import uuid
-from typing import Optional, List
-from sqlalchemy import select, or_
+from typing import Optional, List, Dict, Any
+from sqlalchemy import select, or_, and_
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
-from backend.app.models.catalogo import Producto, ImagenProducto, ProductoTemporada, ProductoColeccion
+from backend.app.models.catalogo import Producto, ImagenProducto, ProductoTemporada, ProductoColeccion, VarianteProducto, Color
 
 class ProductoRepository:
     """
@@ -54,19 +54,111 @@ class ProductoRepository:
         precio_max: Optional[float] = None,
         solo_activos: bool = True,
         limit: int = 50,
-        offset: int = 0
+        offset: int = 0,
+        talla_id: Optional[uuid.UUID] = None,
+        color_id: Optional[uuid.UUID] = None,
+        temporada_id: Optional[uuid.UUID] = None,
+        coleccion_id: Optional[uuid.UUID] = None,
+        busqueda: Optional[str] = None,
+        codigo_hex: Optional[str] = None,
+        filtros: Optional[Dict[str, Any]] = None
     ) -> List[Producto]:
         """
-        CU06 base: filtra productos por categoria, genero, marca, precio, texto.
-        Para CU05 solo provee base; CU06 lo ampliará con talla/color/temporada/coleccion.
+        CU06 - buscarConFiltros completo: filtra productos por categoria, talla, color, temporada, coleccion, precio, texto, genero, marca.
+        Soporta dict filtros para compatibilidad con spec: {"categoria_id":..., "talla_id":..., "color_id":..., "temporada_id":..., "coleccion_id":..., "precio_min":..., "precio_max":..., "busqueda":..., "genero":..., "marca":..., "activo":...}
+        JOIN optimizados: variantes para talla/color, producto_temporada/producto_coleccion, colores para hex.
+        Paginación + solo activos. Deduplicación con DISTINCT.
+        Performance: JOIN productos-variantes-inventario (variantes join aquí; inventario join está en InventarioRepository.porVariante)
         """
-        q = select(Producto).options(selectinload(Producto.imagenes))
+        # Normalizar si se pasó dict como primer arg o como filtros
+        if filtros is not None and isinstance(filtros, dict):
+            # extraer con alias
+            texto = filtros.get("texto", filtros.get("busqueda", filtros.get("q", texto)))
+            busqueda = filtros.get("busqueda", busqueda)
+            categoria_id = filtros.get("categoria_id", categoria_id)
+            talla_id = filtros.get("talla_id", talla_id)
+            color_id = filtros.get("color_id", color_id)
+            temporada_id = filtros.get("temporada_id", temporada_id)
+            coleccion_id = filtros.get("coleccion_id", coleccion_id)
+            genero = filtros.get("genero", genero)
+            marca = filtros.get("marca", marca)
+            precio_min = filtros.get("precio_min", precio_min)
+            precio_max = filtros.get("precio_max", precio_max)
+            # activo param puede venir como "activo" en filtros
+            if "activo" in filtros:
+                solo_activos = filtros["activo"] is True or filtros["activo"] == "true"
+                if filtros["activo"] is False or filtros["activo"] == "false":
+                    solo_activos = False
+            codigo_hex = filtros.get("codigo_hex", filtros.get("color_hex", codigo_hex))
+            # si el dict trae limit/offset lo ignoramos, se pasa aparte
+            # compat: si texto es None pero busqueda tiene valor, usar busqueda
+            if texto is None and busqueda:
+                texto = busqueda
+
+        # Alias busqueda -> texto
+        if busqueda and not texto:
+            texto = busqueda
+        # También soportar que texto pueda venir como busqueda param nombrado "q"
+        # Normalizar tipos precio
+        q = select(Producto).options(selectinload(Producto.imagenes)).distinct()
+
+        # Necesita joins condicionales
+        necesita_variante = talla_id is not None or color_id is not None or codigo_hex is not None
+        # Para evitar duplicados, usar joins con exists-like vía JOIN
+        if necesita_variante:
+            q = q.join(VarianteProducto, VarianteProducto.producto_id == Producto.id)
+            if talla_id:
+                # permitir UUID string
+                if isinstance(talla_id, str):
+                    try:
+                        talla_id = uuid.UUID(talla_id)
+                    except:
+                        pass
+                q = q.where(VarianteProducto.talla_id == talla_id)
+            if color_id:
+                if isinstance(color_id, str):
+                    try:
+                        color_id = uuid.UUID(color_id)
+                    except:
+                        pass
+                q = q.where(VarianteProducto.color_id == color_id)
+            if codigo_hex:
+                # join con colores para filtrar por hex
+                q = q.join(Color, Color.id == VarianteProducto.color_id)
+                hex_norm = codigo_hex.strip().upper()
+                if not hex_norm.startswith("#"):
+                    hex_norm = f"#{hex_norm}"
+                q = q.where(Color.codigo_hex.ilike(hex_norm))
+
+        if temporada_id:
+            if isinstance(temporada_id, str):
+                try:
+                    temporada_id = uuid.UUID(temporada_id)
+                except:
+                    pass
+            q = q.join(ProductoTemporada, ProductoTemporada.producto_id == Producto.id)
+            q = q.where(ProductoTemporada.temporada_id == temporada_id)
+
+        if coleccion_id:
+            if isinstance(coleccion_id, str):
+                try:
+                    coleccion_id = uuid.UUID(coleccion_id)
+                except:
+                    pass
+            q = q.join(ProductoColeccion, ProductoColeccion.producto_id == Producto.id)
+            q = q.where(ProductoColeccion.coleccion_id == coleccion_id)
+
         if solo_activos:
             q = q.where(Producto.activo == True)
         if texto:
             like = f"%{texto.strip()}%"
             q = q.where(or_(Producto.nombre.ilike(like), Producto.descripcion.ilike(like), Producto.marca.ilike(like)))
         if categoria_id:
+            if isinstance(categoria_id, str):
+                try:
+                    categoria_id = uuid.UUID(categoria_id)
+                except:
+                    pass
             q = q.where(Producto.categoria_id == categoria_id)
         if genero:
             q = q.where(Producto.genero.ilike(genero.strip()))

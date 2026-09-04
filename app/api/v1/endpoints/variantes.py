@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.core.database import get_db
 from backend.app.schemas.catalogo_maestros import VarianteCrearDTO, VarianteDTO, VarianteActualizarDTO
 from backend.app.services.variante_service import VarianteService
+from backend.app.services.inventario_service import InventarioService
 
 router = APIRouter()
 
@@ -79,3 +80,16 @@ async def toggleVariante(
 ) -> VarianteDTO:
     servicio = VarianteService(db)
     return await servicio.actualizar(variante_id, VarianteActualizarDTO(activa=activa))
+
+@router.get(
+    "/{variante_id}/disponibilidad",
+    status_code=status.HTTP_200_OK,
+    summary="Consultar disponibilidad por sucursal (CU06 / RF08)",
+    description="Presentación consultarDisponibilidad() -> Controller InventarioService.disponibilidadPorSucursal() -> Datos InventarioRepository.porVariante(). Lista sucursales con disponible>0, diferenciando disponible, reservado, comprometido_traslado, en_transito. Por sucursal, no total global. Solo lectura."
+)
+async def consultarDisponibilidad(
+    variante_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db)
+):
+    servicio = InventarioService(db)
+    return await servicio.disponibilidadPorSucursal(variante_id)

@@ -26,26 +26,52 @@ async def gestionarProductos(
     "",
     response_model=List[ProductoDTO],
     status_code=status.HTTP_200_OK,
-    summary="Listar productos (CU05, base CU06)",
-    description="Controller ProductoService.listar() / CatalogoService.listar() -> Datos ProductoRepository.buscarConFiltros()"
+    summary="Consultar catálogo con filtros avanzados (CU06 / RF05, RF07, RF08)",
+    description="Presentación consultarCatalogo()/filtrarCatalogo() -> Controller CatalogoService.listar()/filtrar() -> Datos ProductoRepository.buscarConFiltros(). Filtros: categoria, talla, color, temporada, coleccion, precio (rango), genero, marca, búsqueda texto. Solo activos por defecto activo=true. Paginación."
 )
 async def listarProductos(
-    solo_activos: bool = Query(False, description="Filtrar solo activos"),
+    solo_activos: bool = Query(True, description="Filtrar solo activos (default true para catálogo)"),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    categoria_id: Optional[uuid.UUID] = Query(None),
+    categoria_id: Optional[uuid.UUID] = Query(None, description="Filtrar por categoría"),
+    talla_id: Optional[uuid.UUID] = Query(None, description="Filtrar por talla (vía variantes)"),
+    color_id: Optional[uuid.UUID] = Query(None, description="Filtrar por color (vía variantes)"),
+    temporada_id: Optional[uuid.UUID] = Query(None, description="Filtrar por temporada"),
+    coleccion_id: Optional[uuid.UUID] = Query(None, description="Filtrar por colección"),
     marca: Optional[str] = Query(None),
     genero: Optional[str] = Query(None),
-    texto: Optional[str] = Query(None, description="Búsqueda por nombre/descripción"),
+    texto: Optional[str] = Query(None, description="Búsqueda por nombre/descripción (alias busqueda)"),
+    busqueda: Optional[str] = Query(None, description="Alias de texto"),
+    q: Optional[str] = Query(None, description="Alias búsqueda"),
+    precio_min: Optional[float] = Query(None, ge=0, description="Precio mínimo"),
+    precio_max: Optional[float] = Query(None, ge=0, description="Precio máximo"),
+    codigo_hex: Optional[str] = Query(None, description="Filtrar por color hex #RRGGBB"),
+    activo: Optional[bool] = Query(None, description="Override activo (si se quiere incluir inactivos)"),
     db: AsyncSession = Depends(get_db)
 ) -> List[ProductoDTO]:
-    servicio = ProductoService(db)
-    if categoria_id or marca or genero or texto:
-        return await servicio.buscarConFiltros(
-            texto=texto,
+    # Prefer CatalogoService para CU06, manteniendo compatibilidad con ProductoService
+    from backend.app.services.catalogo_service import CatalogoService
+    servicio = CatalogoService(db)
+    # Normalizar busqueda alias
+    texto_final = texto or busqueda or q
+    # Determinar si hay algún filtro aplicado -> usar filtrar, sino listar
+    tiene_filtro = any([categoria_id, talla_id, color_id, temporada_id, coleccion_id, marca, genero, texto_final, precio_min is not None, precio_max is not None, codigo_hex])
+    # solo_activos override si activo param explícito
+    if activo is not None:
+        solo_activos = activo
+    if tiene_filtro:
+        return await servicio.filtrar(
+            texto=texto_final,
             categoria_id=categoria_id,
+            talla_id=talla_id,
+            color_id=color_id,
+            temporada_id=temporada_id,
+            coleccion_id=coleccion_id,
             marca=marca,
             genero=genero,
+            precio_min=precio_min,
+            precio_max=precio_max,
+            codigo_hex=codigo_hex,
             solo_activos=solo_activos,
             limit=limit,
             offset=offset

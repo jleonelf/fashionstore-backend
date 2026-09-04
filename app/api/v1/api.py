@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from backend.app.api.v1.endpoints import clientes, sesion, usuarios, roles, ciudades, sucursales, proveedores, recepciones, maestros, productos, variantes
+from backend.app.api.v1.endpoints import clientes, sesion, usuarios, roles, ciudades, sucursales, proveedores, recepciones, maestros, productos, variantes, catalogo
 
 api_router = APIRouter()
 
@@ -19,3 +19,5 @@ api_router.include_router(maestros.router_temporadas, prefix="/temporadas", tags
 api_router.include_router(maestros.router_colecciones, prefix="/colecciones", tags=["Maestros - Colecciones"])
 api_router.include_router(productos.router, prefix="/productos", tags=["Productos"])
 api_router.include_router(variantes.router, prefix="/variantes", tags=["Variantes de Producto"])
+# CU06 - Catálogo y disponibilidad (RF05, RF07, RF08)
+api_router.include_router(catalogo.router, prefix="/catalogo", tags=["Catálogo CU06"])
