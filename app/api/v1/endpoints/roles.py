@@ -2,6 +2,8 @@ from typing import List
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.core.database import get_db
+from backend.app.core.dependencias import get_usuario_actual
+from backend.app.models.seguridad import Usuario
 from backend.app.schemas.usuario import RolDTO
 from backend.app.services.rol_service import RolService
 
@@ -16,7 +18,8 @@ router = APIRouter()
 )
 async def listarRoles(
     solo_activos: bool = True,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _user: Usuario = Depends(get_usuario_actual)
 ) -> List[RolDTO]:
     servicio = RolService(db)
     return await servicio.listar(solo_activos=solo_activos)

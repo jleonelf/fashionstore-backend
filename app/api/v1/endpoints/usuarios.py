@@ -3,6 +3,8 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.core.database import get_db
+from backend.app.core.dependencias import require_roles
+from backend.app.models.seguridad import Usuario
 from backend.app.schemas.usuario import (
     UsuarioCrearDTO,
     UsuarioListadoDTO,
@@ -22,7 +24,8 @@ router = APIRouter()
 )
 async def crearUsuario(
     datos_usuario: UsuarioCrearDTO,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _admin: Usuario = Depends(require_roles("ADMINISTRADOR"))
 ) -> UsuarioListadoDTO:
     servicio = UsuarioService(db)
     return await servicio.crear(datos_usuario)
@@ -37,7 +40,8 @@ async def crearUsuario(
 async def gestionarUsuarios(
     rol_id: Optional[uuid.UUID] = Query(None, description="Filtrar por rol"),
     estado: Optional[str] = Query(None, description="Filtrar por estado ACTIVO o INACTIVO"),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _admin: Usuario = Depends(require_roles("ADMINISTRADOR"))
 ) -> List[UsuarioListadoDTO]:
     servicio = UsuarioService(db)
     return await servicio.listar(rol_id=rol_id, estado=estado)
@@ -52,7 +56,8 @@ async def gestionarUsuarios(
 async def asignarRol(
     usuario_id: uuid.UUID,
     datos_rol: AsignarRolDTO,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _admin: Usuario = Depends(require_roles("ADMINISTRADOR"))
 ) -> UsuarioListadoDTO:
     servicio = UsuarioService(db)
     return await servicio.asignarRol(usuario_id, datos_rol.rol_id)
@@ -67,7 +72,8 @@ async def asignarRol(
 async def actualizarEstadoUsuario(
     usuario_id: uuid.UUID,
     datos_estado: ActualizarEstadoDTO,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _admin: Usuario = Depends(require_roles("ADMINISTRADOR"))
 ) -> UsuarioListadoDTO:
     servicio = UsuarioService(db)
     return await servicio.actualizarEstado(usuario_id, datos_estado.estado)
@@ -81,7 +87,8 @@ async def actualizarEstadoUsuario(
 )
 async def desactivarUsuario(
     usuario_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _admin: Usuario = Depends(require_roles("ADMINISTRADOR"))
 ) -> UsuarioListadoDTO:
     servicio = UsuarioService(db)
     return await servicio.desactivar(usuario_id)

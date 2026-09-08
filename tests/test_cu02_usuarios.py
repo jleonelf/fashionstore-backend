@@ -14,7 +14,10 @@ async def test_listar_roles(cliente_http: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_crear_usuario_con_rol_unico(cliente_http: AsyncClient):
-    # 1. Obtener ID del rol ENCARGADO
+    # 1. Obtener sucursal para encargado
+    resp_suc = await cliente_http.get("/api/v1/sucursales")
+    suc_id = resp_suc.json()[0]["id"] if resp_suc.json() else None
+    # 1b. Obtener ID del rol ENCARGADO
     resp_roles = await cliente_http.get("/api/v1/roles")
     roles = resp_roles.json()
     rol_encargado = next(r for r in roles if r["nombre"] == "ENCARGADO")
@@ -27,7 +30,9 @@ async def test_crear_usuario_con_rol_unico(cliente_http: AsyncClient):
         "apellidos": "Alvarez",
         "correo_electronico": correo,
         "contrasenia": "claveSegura123",
-        "telefono": "+591 78945612"
+        "telefono": "+591 78945612",
+        "sucursal_id": suc_id,
+        "cargo": "Encargado de Sucursal"
     }
 
     resp = await cliente_http.post("/api/v1/usuarios", json=payload)
@@ -47,13 +52,17 @@ async def test_asignar_y_cambiar_rol_usuario(cliente_http: AsyncClient):
 
     uid = uuid.uuid4().hex[:8]
     correo = f"personal.{uid}@fashionstore.com"
+    resp_suc2 = await cliente_http.get("/api/v1/sucursales")
+    suc_id2 = resp_suc2.json()[0]["id"] if resp_suc2.json() else None
     payload = {
         "rol_id": rol_cajero["id"],
         "nombres": "Roberto",
         "apellidos": "Gomez",
         "correo_electronico": correo,
         "contrasenia": "clave123456",
-        "telefono": "+591 71234567"
+        "telefono": "+591 71234567",
+        "sucursal_id": suc_id2,
+        "cargo": "Cajero"
     }
 
     # Crear como Cajero
@@ -78,13 +87,17 @@ async def test_desactivar_usuario_y_bloqueo_login(cliente_http: AsyncClient):
 
     uid = uuid.uuid4().hex[:8]
     correo = f"cajero.inactivo.{uid}@fashionstore.com"
+    resp_suc3 = await cliente_http.get("/api/v1/sucursales")
+    suc_id3 = resp_suc3.json()[0]["id"] if resp_suc3.json() else None
     payload = {
         "rol_id": rol_cajero["id"],
         "nombres": "Ana",
         "apellidos": "Rios",
         "correo_electronico": correo,
         "contrasenia": "claveAna2026",
-        "telefono": "+591 79998877"
+        "telefono": "+591 79998877",
+        "sucursal_id": suc_id3,
+        "cargo": "Cajero"
     }
 
     resp_crear = await cliente_http.post("/api/v1/usuarios", json=payload)

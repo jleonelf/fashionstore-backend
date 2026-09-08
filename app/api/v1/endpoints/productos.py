@@ -3,6 +3,8 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.core.database import get_db
+from backend.app.core.dependencias import require_roles
+from backend.app.models.seguridad import Usuario
 from backend.app.schemas.catalogo_maestros import ProductoCrearDTO, ProductoDTO, ProductoActualizarDTO
 from backend.app.services.producto_service import ProductoService
 
@@ -17,7 +19,8 @@ router = APIRouter()
 )
 async def gestionarProductos(
     datos: ProductoCrearDTO,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _admin: Usuario = Depends(require_roles("ADMINISTRADOR"))
 ) -> ProductoDTO:
     servicio = ProductoService(db)
     return await servicio.crear(datos)
@@ -101,7 +104,8 @@ async def obtenerProducto(
 async def actualizarProducto(
     producto_id: uuid.UUID,
     datos: ProductoActualizarDTO,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _admin: Usuario = Depends(require_roles("ADMINISTRADOR"))
 ) -> ProductoDTO:
     servicio = ProductoService(db)
     return await servicio.actualizar(producto_id, datos)
@@ -115,7 +119,8 @@ async def actualizarProducto(
 async def toggleProducto(
     producto_id: uuid.UUID,
     activo: bool = Query(..., description="Nuevo estado activo"),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _admin: Usuario = Depends(require_roles("ADMINISTRADOR"))
 ) -> ProductoDTO:
     servicio = ProductoService(db)
     return await servicio.actualizar(producto_id, ProductoActualizarDTO(activo=activo))

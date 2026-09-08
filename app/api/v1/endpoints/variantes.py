@@ -3,6 +3,8 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.core.database import get_db
+from backend.app.core.dependencias import require_roles
+from backend.app.models.seguridad import Usuario
 from backend.app.schemas.catalogo_maestros import VarianteCrearDTO, VarianteDTO, VarianteActualizarDTO
 from backend.app.services.variante_service import VarianteService
 from backend.app.services.inventario_service import InventarioService
@@ -18,7 +20,8 @@ router = APIRouter()
 )
 async def gestionarVariantes(
     datos: VarianteCrearDTO,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _admin: Usuario = Depends(require_roles("ADMINISTRADOR"))
 ) -> VarianteDTO:
     servicio = VarianteService(db)
     return await servicio.crear(datos)
@@ -62,7 +65,8 @@ async def obtenerVariante(
 async def actualizarVariante(
     variante_id: uuid.UUID,
     datos: VarianteActualizarDTO,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _admin: Usuario = Depends(require_roles("ADMINISTRADOR"))
 ) -> VarianteDTO:
     servicio = VarianteService(db)
     return await servicio.actualizar(variante_id, datos)
@@ -76,7 +80,8 @@ async def actualizarVariante(
 async def toggleVariante(
     variante_id: uuid.UUID,
     activa: bool = Query(..., description="Nuevo estado activo"),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _admin: Usuario = Depends(require_roles("ADMINISTRADOR"))
 ) -> VarianteDTO:
     servicio = VarianteService(db)
     return await servicio.actualizar(variante_id, VarianteActualizarDTO(activa=activa))

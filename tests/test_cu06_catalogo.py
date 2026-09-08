@@ -41,6 +41,8 @@ async def _get_or_create_ciudad_sucursal(cliente_http, suffix="CU06"):
     return suc1, suc2
 
 async def _crear_usuario_receptor(cliente_http):
+    resp_suc = await cliente_http.get("/api/v1/sucursales")
+    suc_id = resp_suc.json()[0]["id"] if resp_suc.json() else None
     resp_roles = await cliente_http.get("/api/v1/roles")
     roles = resp_roles.json()
     rol = next((r for r in roles if r["nombre"] == "ENCARGADO"), roles[0])
@@ -52,7 +54,9 @@ async def _crear_usuario_receptor(cliente_http):
         "apellidos": f"CU06 {uid}",
         "correo_electronico": correo,
         "contrasenia": "clave123456",
-        "telefono": "+591 70000000"
+        "telefono": "+591 70000000",
+        "sucursal_id": suc_id,
+        "cargo": "Encargado CU06"
     }
     resp = await cliente_http.post("/api/v1/usuarios", json=payload)
     assert resp.status_code == 201, resp.text

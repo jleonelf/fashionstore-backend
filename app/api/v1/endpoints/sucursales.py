@@ -3,6 +3,8 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.core.database import get_db
+from backend.app.core.dependencias import require_roles, get_usuario_actual
+from backend.app.models.seguridad import Usuario
 from backend.app.schemas.organizacion import (
     SucursalCrearDTO,
     SucursalDTO,
@@ -21,7 +23,8 @@ router = APIRouter()
 )
 async def registrarSucursal(
     datos_sucursal: SucursalCrearDTO,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _admin: Usuario = Depends(require_roles("ADMINISTRADOR"))
 ) -> SucursalDTO:
     servicio = SucursalService(db)
     return await servicio.crear(datos_sucursal)
@@ -36,7 +39,8 @@ async def registrarSucursal(
 async def gestionarSucursales(
     ciudad_id: Optional[uuid.UUID] = Query(None, description="Filtrar sucursales por ID de ciudad"),
     solo_activas: bool = True,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _user: Usuario = Depends(get_usuario_actual)
 ) -> List[SucursalDTO]:
     servicio = SucursalService(db)
     return await servicio.listar(ciudad_id=ciudad_id, solo_activas=solo_activas)
@@ -49,7 +53,8 @@ async def gestionarSucursales(
 )
 async def obtenerSucursalPorId(
     sucursal_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _user: Usuario = Depends(get_usuario_actual)
 ) -> SucursalDTO:
     servicio = SucursalService(db)
     return await servicio.obtenerPorId(sucursal_id)
@@ -64,7 +69,8 @@ async def obtenerSucursalPorId(
 async def configurarTarifasDelivery(
     sucursal_id: uuid.UUID,
     datos_tarifas: ConfigurarTarifasDeliveryDTO,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _admin: Usuario = Depends(require_roles("ADMINISTRADOR"))
 ) -> SucursalDTO:
     servicio = SucursalService(db)
     return await servicio.actualizarTarifas(sucursal_id, datos_tarifas)

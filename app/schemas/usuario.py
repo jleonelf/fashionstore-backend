@@ -18,6 +18,8 @@ class UsuarioCrearDTO(BaseModel):
     correo_electronico: EmailStr = Field(..., max_length=160, description="Correo electrónico único")
     contrasenia: str = Field(..., min_length=6, max_length=100, description="Contraseña en texto plano")
     telefono: Optional[str] = Field(None, max_length=30, description="Teléfono")
+    sucursal_id: Optional[uuid.UUID] = Field(None, description="Sucursal asignada (obligatoria para ENCARGADO/CAJERO)")
+    cargo: Optional[str] = Field(None, max_length=80, description="Cargo del empleado (ej. Encargado de Sucursal)")
 
 class AsignarRolDTO(BaseModel):
     rol_id: uuid.UUID = Field(..., description="Nuevo ID del rol a asignar")
@@ -38,3 +40,6 @@ class UsuarioListadoDTO(BaseModel):
     estado: str
     creado_en: datetime
     actualizado_en: datetime
+    sucursal_id: Optional[uuid.UUID] = None
+    sucursal_nombre: Optional[str] = None
+    cargo: Optional[str] = None

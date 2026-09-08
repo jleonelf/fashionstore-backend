@@ -45,6 +45,9 @@ class ClientePerfilDTO(BaseModel):
     fecha_nacimiento: Optional[date] = None
     preferencias: Dict[str, Any] = Field(default_factory=dict)
     creado_en: datetime
+    sucursal_id: Optional[uuid.UUID] = None
+    sucursal_nombre: Optional[str] = None
+    cargo: Optional[str] = None
 
     class Config:
         from_attributes = True

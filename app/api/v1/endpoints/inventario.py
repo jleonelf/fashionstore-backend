@@ -1,9 +1,11 @@
 import uuid
 from datetime import datetime
 from typing import Optional, List, Dict, Any
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, status, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.core.database import get_db
+from backend.app.core.dependencias import require_roles, get_usuario_actual, get_sucursal_del_usuario
+from backend.app.models.seguridad import Usuario
 from backend.app.services.inventario_service import InventarioService
 
 router = APIRouter()
@@ -23,7 +25,16 @@ async def consultarKardex(
     limit: int = Query(100, ge=1, le=200, description="Límite resultados"),
     offset: int = Query(0, ge=0, description="Offset paginación"),
     db: AsyncSession = Depends(get_db),
+    usuario: Usuario = Depends(require_roles("ADMINISTRADOR", "ENCARGADO", "CAJERO")),
 ) -> List[Dict[str, Any]]:
+    # ENCARGADO/CAJERO solo ven su sucursal
+    rol = (usuario.rol.nombre if usuario.rol else "").upper()
+    if rol in ("ENCARGADO", "CAJERO"):
+        propia = get_sucursal_del_usuario(usuario)
+        if propia and sucursal_id and sucursal_id != propia:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Encargado solo puede consultar Kardex de su sucursal asignada")
+        if propia:
+            sucursal_id = propia
     servicio = InventarioService(db)
     return await servicio.kardexPorVariante(
         variante_id=variante_id,
@@ -44,6 +55,7 @@ async def consultarKardex(
 async def obtenerKardexPorId(
     movimiento_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    _user: Usuario = Depends(require_roles("ADMINISTRADOR", "ENCARGADO", "CAJERO")),
 ) -> Dict[str, Any]:
     servicio = InventarioService(db)
     return await servicio.kardexPorId(movimiento_id)
@@ -57,7 +69,17 @@ async def obtenerKardexPorId(
 async def consultarExistencias(
     sucursal_id: Optional[uuid.UUID] = Query(None, description="ID sucursal a consultar, si no se provee retorna todas"),
     db: AsyncSession = Depends(get_db),
+    usuario: Usuario = Depends(require_roles("ADMINISTRADOR", "ENCARGADO", "CAJERO")),
 ) -> List[Dict[str, Any]]:
+    rol = (usuario.rol.nombre if usuario.rol else "").upper()
+    if rol in ("ENCARGADO", "CAJERO"):
+        propia = get_sucursal_del_usuario(usuario)
+        if propia:
+            sucursal_id = propia
+        elif not sucursal_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Encargado sin sucursal asignada")
+        elif sucursal_id != propia:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Encargado solo puede consultar su sucursal")
     servicio = InventarioService(db)
     if sucursal_id:
         return await servicio.existenciasPorSucursal(sucursal_id)
@@ -72,6 +94,12 @@ async def consultarExistencias(
 async def consultarValorizacion(
     sucursal_id: Optional[uuid.UUID] = Query(None, description="Filtrar valorización por sucursal"),
     db: AsyncSession = Depends(get_db),
+    usuario: Usuario = Depends(require_roles("ADMINISTRADOR", "ENCARGADO", "CAJERO")),
 ) -> Dict[str, Any]:
+    rol = (usuario.rol.nombre if usuario.rol else "").upper()
+    if rol in ("ENCARGADO", "CAJERO"):
+        propia = get_sucursal_del_usuario(usuario)
+        if propia:
+            sucursal_id = propia
     servicio = InventarioService(db)
     return await servicio.valorizacion(sucursal_id=sucursal_id)

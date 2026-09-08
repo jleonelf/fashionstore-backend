@@ -12,7 +12,7 @@ class UsuarioRepository:
     async def buscarPorCorreo(self, correo_electronico: str) -> Optional[Usuario]:
         query = (
             select(Usuario)
-            .options(selectinload(Usuario.rol), selectinload(Usuario.cliente))
+            .options(selectinload(Usuario.rol), selectinload(Usuario.cliente), selectinload(Usuario.empleado))
             .where(Usuario.correo_electronico == correo_electronico.strip().lower())
         )
         result = await self.db.execute(query)
@@ -21,14 +21,14 @@ class UsuarioRepository:
     async def buscarPorId(self, usuario_id: uuid.UUID) -> Optional[Usuario]:
         query = (
             select(Usuario)
-            .options(selectinload(Usuario.rol), selectinload(Usuario.cliente))
+            .options(selectinload(Usuario.rol), selectinload(Usuario.cliente), selectinload(Usuario.empleado))
             .where(Usuario.id == usuario_id)
         )
         result = await self.db.execute(query)
         return result.scalars().first()
 
     async def listar(self, rol_id: Optional[uuid.UUID] = None, estado: Optional[str] = None) -> List[Usuario]:
-        query = select(Usuario).options(selectinload(Usuario.rol), selectinload(Usuario.cliente))
+        query = select(Usuario).options(selectinload(Usuario.rol), selectinload(Usuario.cliente), selectinload(Usuario.empleado))
         if rol_id:
             query = query.where(Usuario.rol_id == rol_id)
         if estado:

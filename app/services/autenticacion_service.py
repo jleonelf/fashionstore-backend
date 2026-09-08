@@ -34,9 +34,21 @@ class AutenticacionService:
                 headers={"WWW-Authenticate": "Bearer"}
             )
 
-        # 4. Generar Token JWT
+        # 4. Generar Token JWT con sucursal si es empleado
         rol_nombre = usuario.rol.nombre if usuario.rol else "CLIENTE"
-        token = crear_token_acceso(sujeto=usuario.id, rol=rol_nombre)
+        sucursal_id = usuario.empleado.sucursal_id if getattr(usuario, "empleado", None) else None
+        token = crear_token_acceso(sujeto=usuario.id, rol=rol_nombre, sucursal_id=sucursal_id)
+
+        # resolver nombre sucursal
+        sucursal_nombre = None
+        cargo = None
+        if usuario.empleado and usuario.empleado.sucursal_id:
+            from sqlalchemy import select
+            from backend.app.models.organizacion import Sucursal
+            q = await self.db.execute(select(Sucursal).where(Sucursal.id == usuario.empleado.sucursal_id))
+            suc = q.scalars().first()
+            sucursal_nombre = suc.nombre if suc else None
+            cargo = usuario.empleado.cargo
 
         perfil = ClientePerfilDTO(
             id=usuario.cliente.usuario_id if usuario.cliente else usuario.id,
@@ -51,7 +63,10 @@ class AutenticacionService:
             direccion_referencia=usuario.cliente.direccion_referencia if usuario.cliente else None,
             fecha_nacimiento=usuario.cliente.fecha_nacimiento if usuario.cliente else None,
             preferencias=usuario.cliente.preferencias if usuario.cliente else {},
-            creado_en=usuario.creado_en
+            creado_en=usuario.creado_en,
+            sucursal_id=sucursal_id,
+            sucursal_nombre=sucursal_nombre,
+            cargo=cargo,
         )
 
         return TokenRespuestaDTO(

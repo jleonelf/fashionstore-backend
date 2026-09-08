@@ -3,6 +3,8 @@ from typing import List
 from fastapi import APIRouter, Depends, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.core.database import get_db
+from backend.app.core.dependencias import require_roles, get_usuario_actual
+from backend.app.models.seguridad import Usuario
 from backend.app.schemas.catalogo_maestros import (
     TallaCrearDTO, TallaDTO, TallaActualizarDTO,
     ColorCrearDTO, ColorDTO, ColorActualizarDTO,
@@ -29,7 +31,8 @@ router_colecciones = APIRouter()
 )
 async def crearTalla(
     datos: TallaCrearDTO,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _admin: Usuario = Depends(require_roles("ADMINISTRADOR"))
 ) -> TallaDTO:
     servicio = MaestroService(db)
     return await servicio.crearTalla(datos)
@@ -69,7 +72,8 @@ async def obtenerTalla(
 async def actualizarTalla(
     talla_id: uuid.UUID,
     datos: TallaActualizarDTO,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _admin: Usuario = Depends(require_roles("ADMINISTRADOR"))
 ) -> TallaDTO:
     servicio = MaestroService(db)
     return await servicio.actualizarTalla(talla_id, datos)
@@ -98,7 +102,8 @@ async def toggleTalla(
 )
 async def crearColor(
     datos: ColorCrearDTO,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _admin: Usuario = Depends(require_roles("ADMINISTRADOR"))
 ) -> ColorDTO:
     servicio = MaestroService(db)
     return await servicio.crearColor(datos)
@@ -138,7 +143,8 @@ async def obtenerColor(
 async def actualizarColor(
     color_id: uuid.UUID,
     datos: ColorActualizarDTO,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _admin: Usuario = Depends(require_roles("ADMINISTRADOR"))
 ) -> ColorDTO:
     servicio = MaestroService(db)
     return await servicio.actualizarColor(color_id, datos)
@@ -167,7 +173,8 @@ async def toggleColor(
 )
 async def crearCategoria(
     datos: CategoriaCrearDTO,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _admin: Usuario = Depends(require_roles("ADMINISTRADOR"))
 ) -> CategoriaDTO:
     servicio = MaestroService(db)
     return await servicio.crearCategoria(datos)
@@ -207,7 +214,8 @@ async def obtenerCategoria(
 async def actualizarCategoria(
     categoria_id: uuid.UUID,
     datos: CategoriaActualizarDTO,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _admin: Usuario = Depends(require_roles("ADMINISTRADOR"))
 ) -> CategoriaDTO:
     servicio = MaestroService(db)
     return await servicio.actualizarCategoria(categoria_id, datos)
@@ -236,7 +244,8 @@ async def toggleCategoria(
 )
 async def crearTemporada(
     datos: TemporadaCrearDTO,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _admin: Usuario = Depends(require_roles("ADMINISTRADOR"))
 ) -> TemporadaDTO:
     servicio = MaestroService(db)
     return await servicio.crearTemporada(datos)
@@ -276,7 +285,8 @@ async def obtenerTemporada(
 async def actualizarTemporada(
     temporada_id: uuid.UUID,
     datos: TemporadaActualizarDTO,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _admin: Usuario = Depends(require_roles("ADMINISTRADOR"))
 ) -> TemporadaDTO:
     servicio = MaestroService(db)
     return await servicio.actualizarTemporada(temporada_id, datos)
@@ -305,7 +315,8 @@ async def toggleTemporada(
 )
 async def crearColeccion(
     datos: ColeccionCrearDTO,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _admin: Usuario = Depends(require_roles("ADMINISTRADOR"))
 ) -> ColeccionDTO:
     servicio = MaestroService(db)
     return await servicio.crearColeccion(datos)
@@ -345,7 +356,8 @@ async def obtenerColeccion(
 async def actualizarColeccion(
     coleccion_id: uuid.UUID,
     datos: ColeccionActualizarDTO,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _admin: Usuario = Depends(require_roles("ADMINISTRADOR"))
 ) -> ColeccionDTO:
     servicio = MaestroService(db)
     return await servicio.actualizarColeccion(coleccion_id, datos)
