@@ -4,8 +4,17 @@ from sqlalchemy.pool import NullPool
 from sqlalchemy.orm import declarative_base
 from backend.app.core.config import settings
 
+db_url = settings.async_database_url
+if "sslmode=" in db_url:
+    db_url = (
+        db_url.replace("sslmode=require", "ssl=require")
+        .replace("sslmode=verify-full", "ssl=require")
+        .replace("sslmode=verify-ca", "ssl=require")
+        .replace("sslmode=prefer", "ssl=require")
+    )
+
 engine = create_async_engine(
-    settings.async_database_url,
+    db_url,
     echo=False,
     future=True,
     poolclass=NullPool
