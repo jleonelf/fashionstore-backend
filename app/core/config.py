@@ -34,19 +34,17 @@ class Settings(BaseSettings):
     def async_database_url(self) -> str:
         if self.DATABASE_URL:
             url = self.DATABASE_URL
-            if url.startswith("postgres://"):
-                url = url.replace("postgres://", "postgresql+asyncpg://", 1)
-            elif url.startswith("postgresql://"):
-                url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
-            # asyncpg requiere el parametro ssl en lugar de sslmode (usado por Neon / libpq)
-            if "sslmode=" in url:
-                url = (
-                    url.replace("sslmode=require", "ssl=require")
-                    .replace("sslmode=verify-full", "ssl=require")
-                    .replace("sslmode=verify-ca", "ssl=require")
-                    .replace("sslmode=prefer", "ssl=require")
-                )
-            return url
+            # Separar base y query string para descartar parametros incompatibles con asyncpg (channel_binding, sslmode, etc.)
+            base_url = url.split("?")[0]
+            if base_url.startswith("postgres://"):
+                base_url = base_url.replace("postgres://", "postgresql+asyncpg://", 1)
+            elif base_url.startswith("postgresql://"):
+                base_url = base_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+            
+            # Si la URL usa SSL o es de Neon / AWS, agregar unicamente ?ssl=require
+            if "ssl" in url.lower() or "neon.tech" in url.lower():
+                return f"{base_url}?ssl=require"
+            return base_url
         return f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
 
     class Config:

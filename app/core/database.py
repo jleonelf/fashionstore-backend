@@ -5,13 +5,9 @@ from sqlalchemy.orm import declarative_base
 from backend.app.core.config import settings
 
 db_url = settings.async_database_url
-if "sslmode=" in db_url:
-    db_url = (
-        db_url.replace("sslmode=require", "ssl=require")
-        .replace("sslmode=verify-full", "ssl=require")
-        .replace("sslmode=verify-ca", "ssl=require")
-        .replace("sslmode=prefer", "ssl=require")
-    )
+if "?" in db_url and ("ssl" in db_url.lower() or "neon.tech" in db_url.lower()):
+    base_part = db_url.split("?")[0]
+    db_url = f"{base_part}?ssl=require"
 
 engine = create_async_engine(
     db_url,
