@@ -9,6 +9,10 @@ from backend.app.models.inventario import (
     LoteRecepcion, DetalleLoteRecepcion,
     InventarioSucursal, MovimientoInventario
 )
+from backend.app.models.comercial import (
+    Reserva, DetalleReserva, Venta, DetalleVenta, Pago
+)
+from backend.app.models.traslado import Traslado, DetalleTraslado
 
 __all__ = [
     "Rol", "Usuario", "Cliente", "Empleado",
@@ -17,5 +21,7 @@ __all__ = [
     "Proveedor", "Producto", "ImagenProducto", "ProductoTemporada",
     "ProductoColeccion", "VarianteProducto",
     "LoteRecepcion", "DetalleLoteRecepcion",
-    "InventarioSucursal", "MovimientoInventario"
+    "InventarioSucursal", "MovimientoInventario",
+    "Reserva", "DetalleReserva", "Venta", "DetalleVenta", "Pago",
+    "Traslado", "DetalleTraslado"
 ]

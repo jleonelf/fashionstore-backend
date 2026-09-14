@@ -1,6 +1,7 @@
 import uuid
-from typing import Optional, List, Dict, Any
-from sqlalchemy import select, func
+from typing import Optional, List, Dict, Any, Tuple
+from fastapi import HTTPException, status
+from sqlalchemy import select, func, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.models.inventario import InventarioSucursal
 from backend.app.models.organizacion import Sucursal, Ciudad
@@ -32,6 +33,100 @@ class InventarioRepository:
         )
         result = await self.db.execute(query)
         return result.scalars().first()
+
+    # ---------- Primitivas transaccionales Ciclo 2 (Entrega 1) ----------
+    # Protocolo obligatorio (plan-implementacion-ciclo-2-backend.md):
+    #   1. Resolver y ORDENAR las claves (sucursal_id, variante_id).
+    #   2. SELECT ... FOR UPDATE en ese orden (anti-deadlock).
+    #   3. REVALIDAR cantidades y estado tras adquirir el bloqueo.
+    #   4. Solo el servicio hace commit/rollback; aqui solo flush.
+
+    @staticmethod
+    def ordenarClavesBloqueo(
+        claves: List[Tuple[uuid.UUID, uuid.UUID]],
+    ) -> List[Tuple[uuid.UUID, uuid.UUID]]:
+        """Orden determinista (sucursal_id, variante_id) para bloquear filas.
+
+        Todas las mutaciones de inventario deben bloquear en este orden para
+        reducir deadlocks cuando dos operaciones tocan las mismas filas.
+        """
+        return sorted(claves, key=lambda c: (str(c[0]), str(c[1])))
+
+    async def bloquearFilas(
+        self, claves: List[Tuple[uuid.UUID, uuid.UUID]]
+    ) -> Dict[Tuple[uuid.UUID, uuid.UUID], Optional[InventarioSucursal]]:
+        """Bloquea filas de inventario_sucursal con SELECT FOR UPDATE.
+
+        Recibe claves (sucursal_id, variante_id); las ordena de forma
+        determinista y devuelve el mapa clave -> fila (None si no existe).
+        NO crea filas: una fila inexistente equivale a stock insuficiente y
+        debe resolverse como 409 en el servicio (crearla aqui seria
+        leer-modificar-guardar sin bloqueo ante inserciones fantasma).
+        """
+        ordenadas = self.ordenarClavesBloqueo(list(dict.fromkeys(claves)))
+        if not ordenadas:
+            return {}
+        query = (
+            select(InventarioSucursal)
+            .where(
+                tuple_(InventarioSucursal.sucursal_id, InventarioSucursal.variante_id).in_(ordenadas)
+            )
+            .order_by(InventarioSucursal.sucursal_id, InventarioSucursal.variante_id)
+            .with_for_update()
+        )
+        result = await self.db.execute(query)
+        filas = {(r.sucursal_id, r.variante_id): r for r in result.scalars().all()}
+        return {clave: filas.get(clave) for clave in ordenadas}
+
+    async def moverDisponibleAReservado(
+        self, variante_id: uuid.UUID, sucursal_id: uuid.UUID, cantidad: int
+    ) -> InventarioSucursal:
+        """Mueve cantidad de disponible -> reservado con revalidacion.
+
+        Debe llamarse DESPUES de bloquearFilas sobre la misma transaccion.
+        Revalida stock (409 si insuficiente), actualiza y hace flush.
+        """
+        if cantidad <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cantidad a reservar debe ser mayor a cero",
+            )
+        filas = await self.bloquearFilas([(sucursal_id, variante_id)])
+        registro = filas[(sucursal_id, variante_id)]
+        if registro is None or registro.disponible < cantidad:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Stock insuficiente en sucursal destino",
+            )
+        registro.disponible -= cantidad
+        registro.reservado += cantidad
+        await self.db.flush()
+        return registro
+
+    async def liberarReservado(
+        self, variante_id: uuid.UUID, sucursal_id: uuid.UUID, cantidad: int
+    ) -> InventarioSucursal:
+        """Mueve cantidad de reservado -> disponible con revalidacion.
+
+        Uso: cancelacion/vencimiento/venta parcial (RN-03, RN-04).
+        409 si lo reservado no alcanza (inconsistencia de dominio).
+        """
+        if cantidad <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cantidad a liberar debe ser mayor a cero",
+            )
+        filas = await self.bloquearFilas([(sucursal_id, variante_id)])
+        registro = filas[(sucursal_id, variante_id)]
+        if registro is None or registro.reservado < cantidad:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="No hay suficiente stock reservado para liberar",
+            )
+        registro.reservado -= cantidad
+        registro.disponible += cantidad
+        await self.db.flush()
+        return registro
 
     async def ingresar(self, variante_id: uuid.UUID, sucursal_id: uuid.UUID, cantidad: int) -> InventarioSucursal:
         """Upsert inventario: incrementa disponible. Crea registro si no existe."""

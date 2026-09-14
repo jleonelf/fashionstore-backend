@@ -69,3 +69,24 @@ class SucursalRepository:
         )
         await self.db.execute(query)
         return await self.buscarPorId(sucursal_id)
+
+    async def actualizarAdelanto(
+        self,
+        sucursal_id: uuid.UUID,
+        adelanto_activo: bool,
+        modalidad_adelanto: Optional[str] = None,
+        valor_adelanto: Optional[Decimal] = None,
+    ) -> Optional[Sucursal]:
+        """Actualiza la politica de adelanto por sucursal (decision 13, RN-03)."""
+        valores = {"adelanto_activo": adelanto_activo}
+        if modalidad_adelanto is not None:
+            valores["modalidad_adelanto"] = modalidad_adelanto
+        if valor_adelanto is not None:
+            valores["valor_adelanto"] = valor_adelanto
+        query = (
+            update(Sucursal)
+            .where(Sucursal.id == sucursal_id)
+            .values(**valores)
+        )
+        await self.db.execute(query)
+        return await self.buscarPorId(sucursal_id)

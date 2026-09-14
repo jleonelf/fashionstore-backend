@@ -31,6 +31,11 @@ class ConfigurarTarifasDeliveryDTO(BaseModel):
     anillo_maximo_delivery: Optional[int] = Field(None, ge=1, le=10, description="Anillo máximo")
     delivery_activo: Optional[bool] = Field(None, description="Habilitar/deshabilitar delivery")
 
+class ConfigurarAdelantoDTO(BaseModel):
+    adelanto_activo: bool = Field(..., description="Activa el adelanto en la sucursal")
+    modalidad_adelanto: Optional[str] = Field(None, description="MONTO_FIJO o PORCENTAJE (exigida si activo)")
+    valor_adelanto: Optional[Decimal] = Field(None, description="Monto fijo o porcentaje 0-100 (exigido si activo)")
+
 class SucursalDTO(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: uuid.UUID
@@ -46,3 +51,6 @@ class SucursalDTO(BaseModel):
     anillo_maximo_delivery: int
     delivery_activo: bool
     activa: bool
+    adelanto_activo: bool = False
+    modalidad_adelanto: Optional[str] = None
+    valor_adelanto: Decimal = Decimal("0")

@@ -1,8 +1,15 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
+from typing import Optional
+from datetime import datetime
+import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.core.database import get_db
+from backend.app.core.dependencias import get_usuario_actual
+from backend.app.models.seguridad import Usuario
 from backend.app.schemas.auth import RegistroClienteDTO, ClientePerfilDTO
+from backend.app.schemas.reporte import HistorialComprasDTO
 from backend.app.services.cliente_service import ClienteService
+from backend.app.services.venta_service import VentaService
 
 router = APIRouter()
 
@@ -19,3 +26,24 @@ async def registrarCliente(
 ) -> ClientePerfilDTO:
     servicio = ClienteService(db)
     return await servicio.registrar(datos_registro)
+
+@router.get(
+    "/{cliente_id}/compras",
+    response_model=HistorialComprasDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Historial de compras del cliente (CU13 / RF16)",
+    description="Presentación consultarHistorialCompras() -> Controller VentaService.historialCliente(). Propietario o Administrador (otro cliente -> 403). Filtros por rango de fechas; orden creada_en desc; paginado limit/offset. Costos congelados solo para Administrador."
+)
+async def consultarHistorialCompras(
+    cliente_id: uuid.UUID,
+    desde: Optional[datetime] = Query(None, description="Fecha inicial (UTC, inclusiva)"),
+    hasta: Optional[datetime] = Query(None, description="Fecha final (UTC, inclusiva)"),
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db),
+    usuario: Usuario = Depends(get_usuario_actual)
+) -> HistorialComprasDTO:
+    servicio = VentaService(db)
+    return await servicio.historialCliente(
+        usuario, cliente_id, desde=desde, hasta=hasta, limit=limit, offset=offset,
+    )

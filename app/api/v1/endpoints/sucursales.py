@@ -8,7 +8,8 @@ from backend.app.models.seguridad import Usuario
 from backend.app.schemas.organizacion import (
     SucursalCrearDTO,
     SucursalDTO,
-    ConfigurarTarifasDeliveryDTO
+    ConfigurarTarifasDeliveryDTO,
+    ConfigurarAdelantoDTO
 )
 from backend.app.services.sucursal_service import SucursalService
 
@@ -74,3 +75,19 @@ async def configurarTarifasDelivery(
 ) -> SucursalDTO:
     servicio = SucursalService(db)
     return await servicio.actualizarTarifas(sucursal_id, datos_tarifas)
+
+@router.patch(
+    "/{sucursal_id}/adelanto",
+    response_model=SucursalDTO,
+    status_code=status.HTTP_200_OK,
+    summary="Configurar política de adelanto de la sucursal (RN-03)",
+    description="Activa o desactiva el adelanto (MONTO_FIJO o PORCENTAJE con valor). La reserva/pago congelan la política aplicada; el adelanto es no reembolsable y extiende la vigencia a 72 h."
+)
+async def configurarAdelanto(
+    sucursal_id: uuid.UUID,
+    datos_adelanto: ConfigurarAdelantoDTO,
+    db: AsyncSession = Depends(get_db),
+    _admin: Usuario = Depends(require_roles("ADMINISTRADOR"))
+) -> SucursalDTO:
+    servicio = SucursalService(db)
+    return await servicio.actualizarAdelanto(sucursal_id, datos_adelanto)

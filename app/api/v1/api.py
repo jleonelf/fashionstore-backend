@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from backend.app.api.v1.endpoints import clientes, sesion, usuarios, roles, ciudades, sucursales, proveedores, recepciones, maestros, productos, variantes, catalogo, inventario
+from backend.app.api.v1.endpoints import clientes, sesion, usuarios, roles, ciudades, sucursales, proveedores, recepciones, maestros, productos, variantes, catalogo, inventario, reservas, pagos, traslados, ventas, devoluciones, reportes
 
 api_router = APIRouter()
 
@@ -22,3 +22,11 @@ api_router.include_router(productos.router, prefix="/productos", tags=["Producto
 api_router.include_router(variantes.router, prefix="/variantes", tags=["Variantes de Producto"])
 # CU06 - Catálogo y disponibilidad (RF05, RF07, RF08)
 api_router.include_router(catalogo.router, prefix="/catalogo", tags=["Catálogo CU06"])
+# Ciclo 2 - Operación en sucursal
+api_router.include_router(reservas.router, prefix="/reservas", tags=["Reservas CU08/CU10/CU24"])
+api_router.include_router(pagos.router, prefix="/pagos", tags=["Pagos y Adelantos CU11"])
+api_router.include_router(traslados.router, prefix="/traslados", tags=["Traslados CU09"])
+api_router.include_router(ventas.router, prefix="/ventas", tags=["Venta Presencial CU11"])
+api_router.include_router(devoluciones.router_devoluciones, prefix="/devoluciones", tags=["Devoluciones CU12"])
+api_router.include_router(devoluciones.router_mermas, prefix="/mermas", tags=["Mermas CU12"])
+api_router.include_router(reportes.router, prefix="/reportes", tags=["Reportes CU23"])

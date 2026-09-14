@@ -1,7 +1,8 @@
 import uuid
 from datetime import datetime
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 from sqlalchemy import select, func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.models.inventario import MovimientoInventario
 
@@ -19,6 +20,82 @@ class MovimientoRepository:
         self.db.add(movimiento)
         await self.db.flush()
         return movimiento
+
+    # ---------- Primitivas Ciclo 2 (Entrega 1): un Kardex por efecto real ----------
+    async def buscarPorClaveIdempotencia(self, clave: uuid.UUID) -> Optional[MovimientoInventario]:
+        query = select(MovimientoInventario).where(MovimientoInventario.clave_idempotencia == clave)
+        result = await self.db.execute(query)
+        return result.scalars().first()
+
+    async def buscarPorEfecto(
+        self,
+        referencia_tipo: str,
+        referencia_id: uuid.UUID,
+        tipo: str,
+        variante_id: uuid.UUID,
+        sucursal_origen_id: Optional[uuid.UUID] = None,
+        sucursal_destino_id: Optional[uuid.UUID] = None,
+        linea_referencia_id: Optional[uuid.UUID] = None,
+    ) -> Optional[MovimientoInventario]:
+        """Busca el movimiento de un efecto logico de inventario.
+
+        Equivale a la unicidad (referencia_tipo, referencia_id, tipo,
+        variante_id, sucursales, linea) exigida por el skill Ciclo 2.
+        """
+        query = select(MovimientoInventario).where(
+            MovimientoInventario.referencia_tipo == referencia_tipo,
+            MovimientoInventario.referencia_id == referencia_id,
+            MovimientoInventario.tipo == tipo,
+            MovimientoInventario.variante_id == variante_id,
+        )
+        if sucursal_origen_id is None:
+            query = query.where(MovimientoInventario.sucursal_origen_id.is_(None))
+        else:
+            query = query.where(MovimientoInventario.sucursal_origen_id == sucursal_origen_id)
+        if sucursal_destino_id is None:
+            query = query.where(MovimientoInventario.sucursal_destino_id.is_(None))
+        else:
+            query = query.where(MovimientoInventario.sucursal_destino_id == sucursal_destino_id)
+        if linea_referencia_id is None:
+            query = query.where(MovimientoInventario.linea_referencia_id.is_(None))
+        else:
+            query = query.where(MovimientoInventario.linea_referencia_id == linea_referencia_id)
+        result = await self.db.execute(query)
+        return result.scalars().first()
+
+    async def registrarUnico(
+        self, movimiento: MovimientoInventario
+    ) -> Tuple[MovimientoInventario, bool]:
+        """Registra un movimiento garantizando un unico efecto en Kardex.
+
+        Retorna (movimiento, fue_creado). Si el efecto ya existe (reintento),
+        devuelve el movimiento original con fue_creado=False y NO duplica.
+        Usa SAVEPOINT para no contaminar la transaccion del servicio ante
+        una colision por concurrencia.
+        """
+        try:
+            async with self.db.begin_nested():
+                self.db.add(movimiento)
+                await self.db.flush()
+            return movimiento, True
+        except IntegrityError as e:
+            mensaje = str(getattr(e, "orig", e))
+            if "uq_movimientos_efecto_logico" not in mensaje and "clave_idempotencia" not in mensaje:
+                raise
+            existente = await self.buscarPorEfecto(
+                referencia_tipo=movimiento.referencia_tipo,
+                referencia_id=movimiento.referencia_id,
+                tipo=movimiento.tipo,
+                variante_id=movimiento.variante_id,
+                sucursal_origen_id=movimiento.sucursal_origen_id,
+                sucursal_destino_id=movimiento.sucursal_destino_id,
+                linea_referencia_id=movimiento.linea_referencia_id,
+            )
+            if existente is None and movimiento.clave_idempotencia is not None:
+                existente = await self.buscarPorClaveIdempotencia(movimiento.clave_idempotencia)
+            if existente is None:
+                raise
+            return existente, False
 
     async def listar(
         self,

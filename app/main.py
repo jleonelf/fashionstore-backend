@@ -6,10 +6,26 @@ RAIZ_PROYECTO = Path(__file__).resolve().parent.parent.parent
 if str(RAIZ_PROYECTO) not in sys.path:
     sys.path.insert(0, str(RAIZ_PROYECTO))
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from contextlib import asynccontextmanager
 from backend.app.core.config import settings
 from backend.app.api.v1.api import api_router
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    if settings.EXPIRACION_JOB_ACTIVO:
+        from backend.app.core.tareas import iniciar_scheduler
+
+        iniciar_scheduler(settings.EXPIRACION_JOB_MINUTOS)
+    yield
+    if settings.EXPIRACION_JOB_ACTIVO:
+        from backend.app.core.tareas import detener_scheduler
+
+        detener_scheduler()
+
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -18,6 +34,7 @@ app = FastAPI(
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
     docs_url=f"{settings.API_V1_STR}/docs",
     redoc_url=f"{settings.API_V1_STR}/redoc",
+    lifespan=lifespan,
 )
 
 # Configuración CORS para Angular Web y Flutter Móvil
@@ -30,6 +47,11 @@ app.add_middleware(
 )
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
+
+
+@app.exception_handler(Exception)
+async def error_interno_no_controlado(request: Request, exc: Exception):
+    return JSONResponse(status_code=500, content={"detail": "Error interno del servidor"})
 
 @app.get("/health", tags=["Salud"])
 async def verificar_salud():

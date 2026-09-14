@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 1 día
 
+    # Job de expiración CU24 (scheduler apagado por defecto; activar en producción)
+    EXPIRACION_JOB_ACTIVO: bool = os.getenv("EXPIRACION_JOB_ACTIVO", "false").lower() == "true"
+    EXPIRACION_JOB_MINUTOS: int = int(os.getenv("EXPIRACION_JOB_MINUTOS", "10"))
+
     @property
     def sync_database_url(self) -> str:
         if self.DATABASE_URL:
