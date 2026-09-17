@@ -65,3 +65,51 @@ class LoteRecepcionDTO(BaseModel):
     fecha_recepcion: datetime
     observacion: Optional[str] = None
     detalles: List[DetalleLoteDTO] = Field(default_factory=list)
+
+
+# ---------- Consulta de catálogo CU06 (solo lectura, contrato OpenAPI) ----------
+# DTOs explícitos para los endpoints que retornaban dict/list sin response_model.
+# No cambian el JSON actual ni la lógica de negocio; solo fijan el contrato.
+
+
+class FiltroOpcionItemDTO(BaseModel):
+    id: uuid.UUID
+    nombre: str
+
+
+class TallaOpcionDTO(BaseModel):
+    id: uuid.UUID
+    nombre: str
+    orden: int
+
+
+class ColorOpcionDTO(BaseModel):
+    id: uuid.UUID
+    nombre: str
+    codigo_hex: Optional[str] = None
+
+
+class FiltrosOpcionesDTO(BaseModel):
+    categorias: List[FiltroOpcionItemDTO] = Field(default_factory=list)
+    tallas: List[TallaOpcionDTO] = Field(default_factory=list)
+    colores: List[ColorOpcionDTO] = Field(default_factory=list)
+    temporadas: List[FiltroOpcionItemDTO] = Field(default_factory=list)
+    colecciones: List[FiltroOpcionItemDTO] = Field(default_factory=list)
+    generos: List[str] = Field(default_factory=list)
+    marcas: List[str] = Field(default_factory=list)
+
+
+class DisponibilidadSucursalDTO(BaseModel):
+    inventario_id: uuid.UUID
+    variante_id: uuid.UUID
+    sucursal_id: uuid.UUID
+    sucursal_nombre: str
+    ciudad_id: uuid.UUID
+    ciudad_nombre: str
+    direccion: Optional[str] = None
+    telefono: Optional[str] = None
+    disponible: int
+    reservado: int
+    comprometido_traslado: int
+    en_transito: int
+    actualizado_en: Optional[datetime] = None

@@ -6,6 +6,7 @@ from backend.app.core.database import get_db
 from backend.app.core.dependencias import require_roles
 from backend.app.models.seguridad import Usuario
 from backend.app.schemas.catalogo_maestros import VarianteCrearDTO, VarianteDTO, VarianteActualizarDTO
+from backend.app.schemas.catalogo_extra import DisponibilidadSucursalDTO
 from backend.app.services.variante_service import VarianteService
 from backend.app.services.inventario_service import InventarioService
 
@@ -88,6 +89,7 @@ async def toggleVariante(
 
 @router.get(
     "/{variante_id}/disponibilidad",
+    response_model=List[DisponibilidadSucursalDTO],
     status_code=status.HTTP_200_OK,
     summary="Consultar disponibilidad por sucursal (CU06 / RF08)",
     description="Presentación consultarDisponibilidad() -> Controller InventarioService.disponibilidadPorSucursal() -> Datos InventarioRepository.porVariante(). Lista sucursales con disponible>0, diferenciando disponible, reservado, comprometido_traslado, en_transito. Por sucursal, no total global. Solo lectura."
@@ -95,6 +97,6 @@ async def toggleVariante(
 async def consultarDisponibilidad(
     variante_id: uuid.UUID,
     db: AsyncSession = Depends(get_db)
-):
+) -> List[DisponibilidadSucursalDTO]:
     servicio = InventarioService(db)
     return await servicio.disponibilidadPorSucursal(variante_id)

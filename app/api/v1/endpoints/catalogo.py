@@ -6,6 +6,7 @@ from backend.app.core.database import get_db
 from backend.app.services.catalogo_service import CatalogoService
 from backend.app.services.inventario_service import InventarioService
 from backend.app.schemas.catalogo_maestros import ProductoDTO
+from backend.app.schemas.catalogo_extra import DisponibilidadSucursalDTO, FiltrosOpcionesDTO
 from sqlalchemy import select
 from backend.app.core.database import AsyncSessionLocal
 
@@ -13,11 +14,12 @@ router = APIRouter()
 
 @router.get(
     "/filtros-opciones",
+    response_model=FiltrosOpcionesDTO,
     status_code=status.HTTP_200_OK,
     summary="Opciones de filtros para catálogo (CU06)",
     description="Retorna listas de categorías, tallas, colores, temporadas, colecciones, géneros y marcas para construir filtros en tiempo real. Solo lectura."
 )
-async def filtrosOpciones(db: AsyncSession = Depends(get_db)):
+async def filtrosOpciones(db: AsyncSession = Depends(get_db)) -> FiltrosOpcionesDTO:
     from backend.app.repositories.maestro_repository import MaestroRepository
     from backend.app.repositories.producto_repository import ProductoRepository
     from sqlalchemy import distinct, select
@@ -100,6 +102,7 @@ async def consultarCatalogoAlias(
 
 @router.get(
     "/variantes/{variante_id}/disponibilidad",
+    response_model=List[DisponibilidadSucursalDTO],
     status_code=status.HTTP_200_OK,
     summary="Disponibilidad por sucursal (alias CU06)",
     description="Alias de GET /api/v1/variantes/{id}/disponibilidad para consultarDisponibilidad()"
@@ -107,6 +110,6 @@ async def consultarCatalogoAlias(
 async def consultarDisponibilidadAlias(
     variante_id: uuid.UUID,
     db: AsyncSession = Depends(get_db)
-):
+) -> List[DisponibilidadSucursalDTO]:
     servicio = InventarioService(db)
     return await servicio.disponibilidadPorSucursal(variante_id)

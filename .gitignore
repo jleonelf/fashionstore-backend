@@ -36,5 +36,6 @@ htmlcov/
 
 # Database data
 postgres_data/
+backups/
 *.sqlite3
 *.db

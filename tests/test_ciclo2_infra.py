@@ -535,7 +535,13 @@ async def test_sucursal_adelanto_coherente():
     from sqlalchemy import text
 
     async with AsyncSessionLocal() as db:
-        sucursal_id = (await db.execute(select(Sucursal.id).limit(1))).scalars().first()
+        sucursal = (await db.execute(select(Sucursal).limit(1))).scalars().first()
+        sucursal_id = sucursal.id if sucursal else None
+        estado_original = (
+            sucursal.adelanto_activo,
+            sucursal.modalidad_adelanto,
+            sucursal.valor_adelanto,
+        ) if sucursal else None
     assert sucursal_id is not None
     async with AsyncSessionLocal() as db:
         with pytest.raises(IntegrityError):
@@ -554,4 +560,8 @@ async def test_sucursal_adelanto_coherente():
                 select(Sucursal).where(Sucursal.id == sucursal_id),
             )
         ).scalars().one()
-        assert fila.adelanto_activo is False
+        assert (
+            fila.adelanto_activo,
+            fila.modalidad_adelanto,
+            fila.valor_adelanto,
+        ) == estado_original
