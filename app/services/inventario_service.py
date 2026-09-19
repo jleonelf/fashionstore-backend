@@ -47,7 +47,7 @@ class InventarioService:
 
     async def kardexPorVariante(
         self,
-        variante_id: uuid.UUID,
+        variante_id: Optional[uuid.UUID] = None,
         sucursal_id: Optional[uuid.UUID] = None,
         tipo: Optional[str] = None,
         desde: Optional[datetime] = None,
@@ -57,13 +57,12 @@ class InventarioService:
     ) -> List[Dict[str, Any]]:
         """
         Controller InventarioService.kardexPorVariante() para CU07
-        Consulta Kardex por variante orden fecha_hora desc, filtrar por sucursal, tipo, rango fecha.
-        Auditoría inmutable cada cambio, con ID, fecha_hora, variante, sucursal origen/destino, tipo, cantidad, costo_unitario, responsable, referencia.
-        Solo lectura, expone movimientos ya creados por CU04 (RECEPCION_PROVEEDOR).
+        Consulta Kardex por variante (o global si variante_id es None), orden fecha_hora desc.
         """
-        variante = await self.variante_repo.buscarPorId(variante_id)
-        if not variante:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Variante no encontrada")
+        if variante_id is not None:
+            variante = await self.variante_repo.buscarPorId(variante_id)
+            if not variante:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Variante no encontrada")
         movimientos = await self.movimiento_repo.listar(
             variante_id=variante_id,
             sucursal_id=sucursal_id,

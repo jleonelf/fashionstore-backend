@@ -13,6 +13,10 @@ from backend.app.models.comercial import (
     Reserva, DetalleReserva, Venta, DetalleVenta, Pago
 )
 from backend.app.models.traslado import Traslado, DetalleTraslado
+from backend.app.models.ciclo3 import (
+    Promocion, PromocionVariante, Carrito, DetalleCarrito,
+    PedidoEntrega, HistorialNavegacion, SolicitudIA, RegistroIdempotencia,
+)
 
 __all__ = [
     "Rol", "Usuario", "Cliente", "Empleado",
@@ -23,5 +27,7 @@ __all__ = [
     "LoteRecepcion", "DetalleLoteRecepcion",
     "InventarioSucursal", "MovimientoInventario",
     "Reserva", "DetalleReserva", "Venta", "DetalleVenta", "Pago",
-    "Traslado", "DetalleTraslado"
+    "Traslado", "DetalleTraslado",
+    "Promocion", "PromocionVariante", "Carrito", "DetalleCarrito",
+    "PedidoEntrega", "HistorialNavegacion", "SolicitudIA", "RegistroIdempotencia",
 ]

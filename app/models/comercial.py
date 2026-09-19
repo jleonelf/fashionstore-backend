@@ -146,6 +146,9 @@ class Venta(Base):
     total = Column(Numeric(12, 2), nullable=False, default=0)
     creada_en = Column(DateTime(timezone=True), default=_ahora_utc, nullable=False)
     confirmada_en = Column(DateTime(timezone=True), nullable=True)
+    # Ciclo 3 (CU14/CU15): vencimiento del compromiso de stock digital (60 min).
+    # NULL en ventas presenciales (Ciclo 2) ya confirmadas.
+    expira_en = Column(DateTime(timezone=True), nullable=True)
     # Adelanto descontado en esta venta (CU11: exactamente una vez por reserva).
     adelanto_descontado = Column(Numeric(12, 2), nullable=False, default=0)
     # Idempotencia (plan Ciclo 2)
@@ -181,6 +184,12 @@ class DetalleVenta(Base):
     cantidad = Column(Integer, nullable=False)
     precio_unitario = Column(Numeric(12, 2), nullable=False)
     descuento = Column(Numeric(12, 2), nullable=False, default=0)
+    # Ciclo 3 (CU22/CU14): promoción ganadora congelada por línea (NULL si ninguna).
+    promocion_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("catalogo.promociones.id"),
+        nullable=True,
+    )
     # Costo promedio congelado al vender (RN-09): devoluciones y margenes usan este valor.
     costo_promedio = Column(Numeric(12, 2), nullable=False, default=0)
 

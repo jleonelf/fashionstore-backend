@@ -35,6 +35,10 @@ class DetalleVentaDTO(BaseModel):
     cantidad: int
     precio_unitario: Decimal
     descuento: Decimal
+    # Ciclo 3 (CU22/CU14): promoción ganadora congelada por línea (NULL si ninguna).
+    promocion_id: Optional[uuid.UUID] = Field(
+        None, description="Promoción aplicada y congelada al vender"
+    )
     costo_promedio: Optional[Decimal] = Field(
         None, description="Costo congelado; solo roles autorizados (ADMIN/ENCARGADO)"
     )
@@ -57,6 +61,10 @@ class VentaDTO(BaseModel):
     total: Decimal
     creada_en: datetime
     confirmada_en: Optional[datetime] = None
+    # Ciclo 3 (CU14/CU15): vencimiento del compromiso digital (NULL en presenciales).
+    expira_en: Optional[datetime] = Field(
+        None, description="Vencimiento del compromiso de stock digital (60 min)"
+    )
     detalles: List[DetalleVentaDTO] = Field(default_factory=list)
 
 

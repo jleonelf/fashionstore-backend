@@ -43,7 +43,7 @@ async def registrarVentaPresencial(
     description="Propietario cliente, personal de la sucursal o Administrador. Costos congelados solo para ADMIN/ENCARGADO.",
 )
 async def consultarVenta(
-    venta_id: uuid.UUID,
+    venta_id: str,
     db: AsyncSession = Depends(get_db),
     usuario: Usuario = Depends(get_usuario_actual),
 ) -> VentaDTO:
@@ -58,7 +58,7 @@ async def consultarVenta(
     description="Mismos permisos que la venta. Incluye pagos, codigo de reserva, sucursal y cajero.",
 )
 async def consultarComprobante(
-    venta_id: uuid.UUID,
+    venta_id: str,
     db: AsyncSession = Depends(get_db),
     usuario: Usuario = Depends(get_usuario_actual),
 ) -> ComprobanteDTO:

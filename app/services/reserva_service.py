@@ -15,7 +15,7 @@ Los repositorios hacen flush; solo el servicio confirma o revierte.
 import secrets
 import string
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Dict, List, Optional, Tuple
 
@@ -207,7 +207,11 @@ class ReservaService:
             estado="PENDIENTE_TRASLADO" if con_traslado else "PENDIENTE",
             fecha_creacion=ahora,
             fecha_visita=dto.fecha_visita,
-            vence_en=calcular_vencimiento(ahora, False),
+            vence_en=(
+                asegurar_utc(dto.fecha_visita) + timedelta(days=1)
+                if dto.fecha_visita
+                else calcular_vencimiento(ahora, False)
+            ),
             observacion=dto.observacion,
             clave_idempotencia=clave,
             hash_solicitud=digest,

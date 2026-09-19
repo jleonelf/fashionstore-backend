@@ -1,7 +1,7 @@
 """CU13/CU23 — Historial del cliente y ventas por sucursal + contrato OpenAPI.
 
 Filtros, orden (creada_en desc), paginacion, costos por rol y
-verificacion de que el contrato no expone Ciclo 3.
+verificacion del contrato Ciclo 2 + presencia de rutas Ciclo 3 (Puerta B).
 """
 from httpx import AsyncClient
 from tests.helpers_ciclo2 import (
@@ -117,9 +117,20 @@ async def test_openapi_contrato_ciclo2_sin_ciclo3(cliente_http: AsyncClient):
     ]
     for ruta in esperadas:
         assert ruta in paths, f"falta {ruta}"
-    prohibidas = ["carrito", "pasarela", "entrega", "promocion", "/ia/", "probador"]
-    for ruta in paths:
-        assert not any(p in ruta for p in prohibidas), f"ruta de Ciclo 3 expuesta: {ruta}"
+    # Puerta B Ciclo 3: el contrato aprobado YA expone las rutas digitales.
+    # (Antes prohibidas en Ciclo 2; ver test_openapi_contrato_ciclo3_presente.)
+    esperadas_ciclo3 = [
+        "/api/v1/carritos/mio", "/api/v1/carritos/mio/lineas",
+        "/api/v1/carritos/mio/checkout", "/api/v1/promociones",
+        "/api/v1/pagos/stripe/intenciones", "/api/v1/pagos/stripe/webhook",
+        "/api/v1/entregas/cotizacion", "/api/v1/entregas/cola",
+        "/api/v1/ia/recomendaciones", "/api/v1/ia/busqueda",
+        "/api/v1/probador/autorizaciones",
+        "/api/v1/variantes/{variante_id}/prueba-virtual",
+        "/api/v1/reportes/dashboard",
+    ]
+    for ruta in esperadas_ciclo3:
+        assert ruta in paths, f"falta ruta Ciclo 3 {ruta}"
 
 
 async def test_openapi_tipos_y_paginacion_corregidos(cliente_http: AsyncClient):

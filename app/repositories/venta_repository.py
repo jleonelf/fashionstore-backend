@@ -40,6 +40,14 @@ class VentaRepository:
         result = await self.db.execute(select(Venta.id).where(Venta.numero == numero))
         return result.scalars().first() is not None
 
+    async def buscarPorNumero(self, numero: str) -> Optional[Venta]:
+        query = (
+            select(Venta)
+            .options(selectinload(Venta.detalles))
+            .where(Venta.numero == numero)
+        )
+        return (await self.db.execute(query)).scalars().first()
+
     async def adelantoYaDescontado(self, reserva_id: uuid.UUID) -> bool:
         """True si alguna venta de la reserva ya desconto adelanto (una sola vez)."""
         result = await self.db.execute(

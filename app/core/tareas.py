@@ -16,6 +16,7 @@ _scheduler = None
 async def ejecutar_expiracion_programada() -> None:
     from backend.app.core.database import AsyncSessionLocal
     from backend.app.services.reserva_service import ReservaService
+    from backend.app.services.stripe_service import StripeService
 
     async with AsyncSessionLocal() as db:
         servicio = ReservaService(db)
@@ -28,6 +29,16 @@ async def ejecutar_expiracion_programada() -> None:
             )
         except Exception:
             logger.exception("Fallo el job de expiracion CU24")
+    # Ciclo 3 (CU15): ventas digitales PENDIENTE_PAGO vencidas (mismo scheduler).
+    async with AsyncSessionLocal() as db:
+        try:
+            resumen = await StripeService(db).cancelarVencidas()
+            logger.info(
+                "Expiracion CU15: procesadas=%s canceladas=%s",
+                resumen.get("procesadas"), len(resumen.get("canceladas", [])),
+            )
+        except Exception:
+            logger.exception("Fallo el job de expiracion CU15")
 
 
 def iniciar_scheduler(intervalo_minutos: int = 10):

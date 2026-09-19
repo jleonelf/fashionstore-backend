@@ -152,6 +152,8 @@ def aplicar_migraciones() -> None:
 # Tablas del Ciclo 2 (las crea la migración 0001 con sus tipos ENUM).
 # Se excluyen del primer create_all porque la migración asume que las
 # tablas del Ciclo 1 ya existen (FK hacia seguridad.clientes, etc.).
+# Las tablas del Ciclo 3 las crea la migración 0004; también se excluyen
+# de esta primera fase para que migración y modelos no compitan.
 TABLAS_CICLO2 = frozenset(
     {
         "reservas",
@@ -161,6 +163,18 @@ TABLAS_CICLO2 = frozenset(
         "ventas",
         "detalles_venta",
         "pagos",
+    }
+)
+TABLAS_CICLO3 = frozenset(
+    {
+        "carritos",
+        "detalles_carrito",
+        "pedidos_entrega",
+        "promociones",
+        "promocion_variante",
+        "historial_navegacion",
+        "solicitudes_ia",
+        "registros_idempotencia",
     }
 )
 
@@ -259,6 +273,7 @@ async def aplicar_esquema_ciclo1() -> None:
         t
         for nombre, t in Base.metadata.tables.items()
         if nombre.rsplit(".", 1)[-1] not in TABLAS_CICLO2
+        and nombre.rsplit(".", 1)[-1] not in TABLAS_CICLO3
     ]
     engine = create_async_engine(settings.async_database_url)
     try:

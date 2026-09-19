@@ -23,6 +23,26 @@ class Settings(BaseSettings):
     EXPIRACION_JOB_ACTIVO: bool = os.getenv("EXPIRACION_JOB_ACTIVO", "false").lower() == "true"
     EXPIRACION_JOB_MINUTOS: int = int(os.getenv("EXPIRACION_JOB_MINUTOS", "10"))
 
+    # Ciclo 3 — Stripe Test Mode (claves solo en backend/.env, nunca en Git).
+    STRIPE_ENABLED: bool = os.getenv("STRIPE_ENABLED", "false").lower() == "true"
+    STRIPE_SECRET_KEY: str = os.getenv("STRIPE_SECRET_KEY", "")
+    STRIPE_WEBHOOK_SECRET: str = os.getenv("STRIPE_WEBHOOK_SECRET", "")
+    STRIPE_CURRENCY: str = os.getenv("STRIPE_CURRENCY", "usd")
+
+    # Ciclo 3 — Decart Lucy 2.5 (API key permanente solo en backend).
+    DECART_ENABLED: bool = os.getenv("DECART_ENABLED", "false").lower() == "true"
+    DECART_API_KEY: str = os.getenv("DECART_API_KEY", "")
+    DECART_API_BASE_URL: str = os.getenv("DECART_API_BASE_URL", "https://api.decart.ai")
+    DECART_MODEL: str = os.getenv("DECART_MODEL", "lucy-2.5")
+    DECART_TOKEN_TTL_SECONDS: int = int(os.getenv("DECART_TOKEN_TTL_SECONDS", "60"))
+    DECART_SESSION_MAX_SECONDS: int = int(os.getenv("DECART_SESSION_MAX_SECONDS", "120"))
+    DECART_RATE_LIMIT_POR_MINUTO: int = int(os.getenv("DECART_RATE_LIMIT_POR_MINUTO", "10"))
+
+    # Ciclo 3 — IA (Gemini opcional; sin clave rige fallback determinista).
+    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
+    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+    GEMINI_TIMEOUT_SECONDS: int = int(os.getenv("GEMINI_TIMEOUT_SECONDS", "8"))
+
     @property
     def sync_database_url(self) -> str:
         if self.DATABASE_URL:

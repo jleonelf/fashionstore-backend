@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 from backend.app.api.v1.endpoints import clientes, sesion, usuarios, roles, ciudades, sucursales, proveedores, recepciones, maestros, productos, variantes, catalogo, inventario, reservas, pagos, traslados, ventas, devoluciones, reportes
+from backend.app.api.v1.endpoints import promociones, carritos, pagos_stripe, entregas, probador, ia, dashboard
 
 api_router = APIRouter()
 
@@ -30,3 +31,11 @@ api_router.include_router(ventas.router, prefix="/ventas", tags=["Venta Presenci
 api_router.include_router(devoluciones.router_devoluciones, prefix="/devoluciones", tags=["Devoluciones CU12"])
 api_router.include_router(devoluciones.router_mermas, prefix="/mermas", tags=["Mermas CU12"])
 api_router.include_router(reportes.router, prefix="/reportes", tags=["Reportes CU23"])
+api_router.include_router(dashboard.router, prefix="/reportes", tags=["Dashboard CU19"])
+# Ciclo 3 - Compra digital, pagos, entregas, promociones, probador e IA
+api_router.include_router(promociones.router, prefix="/promociones", tags=["Promociones CU22"])
+api_router.include_router(carritos.router, prefix="/carritos", tags=["Carrito y Checkout CU14"])
+api_router.include_router(pagos_stripe.router, prefix="/pagos", tags=["Stripe Test CU15"])
+api_router.include_router(entregas.router, prefix="/entregas", tags=["Entregas CU16"])
+api_router.include_router(probador.router, prefix="", tags=["Probador Decart CU17"])
+api_router.include_router(ia.router, prefix="/ia", tags=["IA CU18/CU20/CU21/CU25"])

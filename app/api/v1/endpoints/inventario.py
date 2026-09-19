@@ -17,7 +17,7 @@ router = APIRouter()
     description="Presentación consultarKardex() -> Controller InventarioService.kardexPorVariante() -> Datos MovimientoRepository.listar(). Auditoría inmutable cada cambio, con ID, fecha_hora, variante, sucursal origen/destino, tipo, cantidad, costo_unitario, responsable, referencia. Tipos Ciclo1 al menos RECEPCION_PROVEEDOR. Orden fecha_hora desc, filtrar por sucursal, tipo, rango fecha.",
 )
 async def consultarKardex(
-    variante_id: uuid.UUID = Query(..., description="ID de variante a consultar"),
+    variante_id: Optional[uuid.UUID] = Query(None, description="ID de variante a consultar"),
     sucursal_id: Optional[uuid.UUID] = Query(None, description="Filtrar por sucursal origen/destino"),
     tipo: Optional[str] = Query(None, description="Filtrar por tipo (RECEPCION_PROVEEDOR)"),
     desde: Optional[datetime] = Query(None, description="Rango desde (fecha_hora >=)"),

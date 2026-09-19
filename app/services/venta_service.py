@@ -93,10 +93,12 @@ class VentaService:
             subtotal=venta.subtotal, descuento=venta.descuento,
             adelanto_descontado=venta.adelanto_descontado, costo_entrega=venta.costo_entrega,
             total=venta.total, creada_en=venta.creada_en, confirmada_en=venta.confirmada_en,
+            expira_en=getattr(venta, "expira_en", None),
             detalles=[
                 DetalleVentaDTO(
                     id=d.id, detalle_reserva_id=d.detalle_reserva_id, variante_id=d.variante_id,
                     cantidad=d.cantidad, precio_unitario=d.precio_unitario, descuento=d.descuento,
+                    promocion_id=getattr(d, "promocion_id", None),
                     costo_promedio=d.costo_promedio if con_costos else None,
                 )
                 for d in venta.detalles
@@ -134,19 +136,31 @@ class VentaService:
             return
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Rol no autorizado")
 
-    async def obtener(self, usuario: Usuario, venta_id: uuid.UUID) -> VentaDTO:
-        venta = await self.venta_repo.buscarPorId(venta_id)
-        if venta is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Venta no encontrada")
-        self._autorizar_lectura_venta(usuario, venta)
-        return await self._a_dto(venta_id, self._con_costos(usuario))
+    async def _resolver_venta(self, identificador: Any) -> Optional[Venta]:
+        if isinstance(identificador, uuid.UUID):
+            return await self.venta_repo.buscarPorId(identificador)
+        if isinstance(identificador, str):
+            texto = identificador.strip()
+            try:
+                uid = uuid.UUID(texto)
+                return await self.venta_repo.buscarPorId(uid)
+            except ValueError:
+                return await self.venta_repo.buscarPorNumero(texto)
+        return None
 
-    async def obtenerComprobante(self, usuario: Usuario, venta_id: uuid.UUID) -> ComprobanteDTO:
-        venta = await self.venta_repo.buscarPorId(venta_id)
+    async def obtener(self, usuario: Usuario, venta_id: Any) -> VentaDTO:
+        venta = await self._resolver_venta(venta_id)
         if venta is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Venta no encontrada")
         self._autorizar_lectura_venta(usuario, venta)
-        return await self._a_comprobante(venta_id, self._con_costos(usuario))
+        return await self._a_dto(venta.id, self._con_costos(usuario))
+
+    async def obtenerComprobante(self, usuario: Usuario, venta_id: Any) -> ComprobanteDTO:
+        venta = await self._resolver_venta(venta_id)
+        if venta is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Venta no encontrada")
+        self._autorizar_lectura_venta(usuario, venta)
+        return await self._a_comprobante(venta.id, self._con_costos(usuario))
 
     # ---------------- historial CU13 (Entrega 7) ----------------
     async def historialCliente(
