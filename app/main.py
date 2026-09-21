@@ -79,7 +79,18 @@ app.include_router(api_router, prefix=settings.API_V1_STR)
 async def error_interno_no_controlado(request: Request, exc: Exception):
     import traceback
     traceback.print_exc()
-    return JSONResponse(status_code=500, content={"detail": f"Error interno: {type(exc).__name__}: {str(exc)}"})
+    origin = request.headers.get("origin") or "*"
+    headers = {
+        "Access-Control-Allow-Origin": origin,
+        "Access-Control-Allow-Credentials": "true",
+        "Access-Control-Allow-Methods": "*",
+        "Access-Control-Allow-Headers": "*",
+    }
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"Error interno: {type(exc).__name__}: {str(exc)}"},
+        headers=headers,
+    )
 
 @app.get("/health", tags=["Salud"])
 async def verificar_salud():
@@ -103,7 +114,7 @@ async def debug_db():
             ))
             constraints = {row[0]: row[1] for row in res}
             return {
-                "version": "debug-ciclo3-v3",
+                "version": "debug-ciclo3-v4",
                 "constraints": constraints,
             }
     except Exception as e:
