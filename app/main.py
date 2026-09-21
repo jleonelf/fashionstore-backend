@@ -18,7 +18,10 @@ from backend.app.api.v1.api import api_router
 async def lifespan(app: FastAPI):
     # Asegurar compatibilidad de restricciones de Ciclo 3 en la base de datos (Neon / local)
     try:
-        from backend.app.core.database import AsyncSessionLocal
+        try:
+            from backend.app.core.database import AsyncSessionLocal
+        except ImportError:
+            from app.core.database import AsyncSessionLocal
         from sqlalchemy import text
         async with AsyncSessionLocal() as db_init:
             await db_init.execute(text(
@@ -34,6 +37,16 @@ async def lifespan(app: FastAPI):
                 "    'VENTA_PRESENCIAL','VENTA_DIGITAL','DEVOLUCION','MERMA','AJUSTE',"
                 "    'COMPROMISO_DIGITAL','LIBERACION_DIGITAL'"
                 "  )"
+                ");"
+            ))
+            await db_init.execute(text(
+                "ALTER TABLE inteligencia.historial_navegacion "
+                "DROP CONSTRAINT IF EXISTS historial_navegacion_evento_check;"
+            ))
+            await db_init.execute(text(
+                "ALTER TABLE inteligencia.historial_navegacion "
+                "ADD CONSTRAINT historial_navegacion_evento_check CHECK ("
+                "  evento IN ('VISTA_PRODUCTO','BUSQUEDA','AGREGA_CARRITO','AGREGA_RESERVA','PRUEBA_VIRTUAL','COMPRA')"
                 ");"
             ))
             await db_init.commit()

@@ -498,13 +498,17 @@ class CarritoService:
         carrito.convertida_en = ahora
         carrito.venta_id = venta.id
         await self.db.flush()
-        self.db.add(
-            HistorialNavegacion(
-                cliente_id=cliente_id, usuario_id=usuario.id, evento="COMPRA",
-                metadatos={"venta_id": str(venta.id), "canal": dto.canal},
-            )
-        )
-        await self.db.flush()
+        try:
+            async with self.db.begin_nested():
+                self.db.add(
+                    HistorialNavegacion(
+                        cliente_id=cliente_id, usuario_id=usuario.id, evento="COMPRA",
+                        metadatos={"venta_id": str(venta.id), "canal": dto.canal},
+                    )
+                )
+                await self.db.flush()
+        except Exception:
+            pass
         return CheckoutRespuestaDTO(
             venta_id=venta.id, numero=venta.numero, estado="PENDIENTE_PAGO",
             total=total, expira_en=venta.expira_en, pedido_entrega_id=pedido.id,

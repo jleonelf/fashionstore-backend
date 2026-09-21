@@ -26,4 +26,19 @@ ALTER TABLE inventario.movimientos_inventario
     )
   );
 
+ALTER TABLE inteligencia.historial_navegacion 
+  DROP CONSTRAINT IF EXISTS historial_navegacion_evento_check;
+
+ALTER TABLE inteligencia.historial_navegacion 
+  ADD CONSTRAINT historial_navegacion_evento_check CHECK (
+    evento IN (
+      'VISTA_PRODUCTO',
+      'BUSQUEDA',
+      'AGREGA_CARRITO',
+      'AGREGA_RESERVA',
+      'PRUEBA_VIRTUAL',
+      'COMPRA'
+    )
+  );
+
 COMMIT;
