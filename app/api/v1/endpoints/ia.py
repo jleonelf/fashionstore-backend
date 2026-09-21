@@ -11,6 +11,7 @@ from backend.app.schemas.probador_ia import (
     ReportePedirDTO, ReporteRespuestaDTO,
 )
 from backend.app.services.ia_service import IAService
+from backend.app.api.v1.endpoints._errores import E401, E403, E404, E422
 
 router = APIRouter()
 
@@ -20,6 +21,7 @@ router = APIRouter()
     summary="Registrar navegación/uso sanitizado (CU17/CU18)",
     description="Eventos cerrados (VISTA, PRUEBA_VIRTUAL, CARRITO, COMPRA, BUSQUEDA). "
     "Nunca recibe ni guarda token, Base64, video, frames, rostro ni SDP.",
+    responses={401: E401, 403: E403, 422: E422},
 )
 async def registrarNavegacion(
     datos: NavegacionCrearDTO,
@@ -35,7 +37,9 @@ async def registrarNavegacion(
     "/recomendaciones", response_model=RecomendacionRespuestaDTO,
     summary="Sugerencias IA para el cliente (CU18)",
     description="Motor determinista primero: preferencias, navegación, temporada y disponibilidad. "
-    "Solo productos reales y disponibles; sin IDs, stock ni atributos inventados. Auditoría en solicitudes_ia.",
+    "Solo productos reales y disponibles; sin IDs, stock ni atributos inventados. Importes y "
+    "filtros con Decimal. Auditoría en solicitudes_ia.",
+    responses={401: E401, 403: E403, 422: E422},
 )
 async def pedirSugerencias(
     datos: RecomendacionPedirDTO,
@@ -51,8 +55,9 @@ async def pedirSugerencias(
     "/busqueda", response_model=BusquedaRespuestaDTO,
     summary="Buscar prendas por texto/voz (CU20)",
     description="El cliente dicta o escribe; el backend interpreta a un DTO cerrado de filtros "
-    "(categoría, talla, color, temporada, precio). Gemini detrás de interfaz reemplazable; "
-    "sin clave rige el fallback determinista. Caída a texto simple si no interpreta.",
+    "(categoría, talla, color, temporada, precio con Decimal). Gemini detrás de interfaz "
+    "reemplazable; sin clave rige el fallback determinista. Caída a texto simple si no interpreta.",
+    responses={401: E401, 403: E403, 422: E422},
 )
 async def buscarPorVoz(
     datos: BusquedaVozDTO,
@@ -69,6 +74,7 @@ async def buscarPorVoz(
     "(ventasPorSucursal, ventasPorTemporada, stockCritico, topVendidos, efectividadReservas, "
     "rotacionPorTemporada). Nunca SQL generado ni aportado; nunca muta negocio. "
     "Respuesta: función usada, parámetros validados, datos y narrativa.",
+    responses={401: E401, 403: E403, 422: E422, 404: E404},
 )
 async def solicitarReporte(
     datos: ReportePedirDTO,
@@ -84,6 +90,7 @@ async def solicitarReporte(
     description="Solo ADMINISTRADOR/ENCARGADO. Detecta baja rotación (sugiere promoción, liquidación "
     "o traslado) y estima reposición (promedio de ventas × 14 días de proveedor). "
     "Solo recomienda: no crea promociones, traslados, recepciones ni movimientos.",
+    responses={401: E401, 403: E403, 422: E422},
 )
 async def sugerirDecisiones(
     datos: DecisionPedirDTO,

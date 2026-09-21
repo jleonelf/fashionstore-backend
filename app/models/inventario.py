@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from backend.app.core.reloj import utcnow
 from sqlalchemy import Column, String, Text, Integer, Numeric, ForeignKey, DateTime, UniqueConstraint, CheckConstraint, Index
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -16,7 +16,7 @@ class LoteRecepcion(Base):
     coleccion_id = Column(UUID(as_uuid=True), ForeignKey("catalogo.colecciones.id"), nullable=True)
     recibido_por_id = Column(UUID(as_uuid=True), ForeignKey("seguridad.usuarios.id"), nullable=False)
     numero_documento = Column(String(100), nullable=True)
-    fecha_recepcion = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    fecha_recepcion = Column(DateTime(timezone=True), default=utcnow, nullable=False)
     observacion = Column(Text, nullable=True)
 
     detalles = relationship("DetalleLoteRecepcion", back_populates="lote", cascade="all, delete-orphan")
@@ -54,7 +54,7 @@ class InventarioSucursal(Base):
     reservado = Column(Integer, nullable=False, default=0)
     comprometido_traslado = Column(Integer, nullable=False, default=0)
     en_transito = Column(Integer, nullable=False, default=0)
-    actualizado_en = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    actualizado_en = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 
 class MovimientoInventario(Base):
     __tablename__ = "movimientos_inventario"
@@ -93,5 +93,5 @@ class MovimientoInventario(Base):
     linea_referencia_id = Column(UUID(as_uuid=True), nullable=True)
     # Idempotencia (plan Ciclo 2): Idempotency-Key de la solicitud.
     clave_idempotencia = Column(UUID(as_uuid=True), nullable=True)
-    fecha_hora = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    fecha_hora = Column(DateTime(timezone=True), default=utcnow, nullable=False)
     observacion = Column(Text, nullable=True)

@@ -13,7 +13,11 @@ engine = create_async_engine(
     db_url,
     echo=False,
     future=True,
-    poolclass=NullPool
+    poolclass=NullPool,
+    # Evita depender de la zona del servidor (local, Render o Neon). PostgreSQL
+    # sigue almacenando timestamptz como instante absoluto, pero now() y las
+    # consultas SQL de fechas se interpretan/presentan en la zona del negocio.
+    connect_args={"server_settings": {"timezone": settings.BUSINESS_TIMEZONE}},
 )
 
 AsyncSessionLocal = async_sessionmaker(

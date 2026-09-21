@@ -38,7 +38,9 @@ async def test_busqueda_por_voz_filtros_y_fallback(cliente_http: AsyncClient):
         dto = r.json()
         assert dto["proveedor"] == "DETERMINISTA"
         assert dto["filtros"]["color"] == "VERDE", dto
-        assert dto["filtros"]["precio_max"] == 150.0, dto
+        # Importes con Decimal (serializado como string), nunca float.
+        from decimal import Decimal as _D
+        assert _D(str(dto["filtros"]["precio_max"])) == _D("150.00"), dto
         # Texto libre sin palabras clave: caída a texto, sin error.
         r = await cli.client.post("/api/v1/ia/busqueda", json={"texto": "hola, ¿qué hay de nuevo?"})
         assert r.status_code == 200 and r.json()["total"] >= 0, r.text

@@ -35,6 +35,20 @@ class DashboardService:
         self, usuario: Usuario, desde: Optional[datetime] = None,
         hasta: Optional[datetime] = None, sucursal_id: Optional[uuid.UUID] = None,
     ) -> DashboardDTO:
+        from backend.app.core.reloj import entrada_local_a_utc
+
+        def _utc(dt: Optional[datetime]) -> Optional[datetime]:
+            if dt is None:
+                return None
+            return entrada_local_a_utc(dt)
+
+        desde = _utc(desde)
+        hasta = _utc(hasta)
+        if desde is not None and hasta is not None and desde > hasta:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Rango inválido: desde debe ser <= hasta (UTC)",
+            )
         rol = rol_de(usuario)
         if rol == "ENCARGADO":
             if sucursal_id is None:
@@ -126,14 +140,27 @@ class DashboardService:
                                 "disponible": fila.disponible, "existencia": existencia})
         critico.sort(key=lambda x: x["disponible"])
 
-        # Conversión de reservas.
+        # Conversión de reservas (respeta desde/hasta/sucursal, UTC).
         res_q = select(func.count()).select_from(Reserva)
         comp_q = select(func.count()).select_from(Reserva).where(Reserva.estado == "COMPLETADA")
+        if desde is not None:
+            res_q = res_q.where(Reserva.fecha_creacion >= desde)
+            comp_q = comp_q.where(Reserva.fecha_creacion >= desde)
+        if hasta is not None:
+            res_q = res_q.where(Reserva.fecha_creacion <= hasta)
+            comp_q = comp_q.where(Reserva.fecha_creacion <= hasta)
+        if sucursal_id is not None:
+            res_q = res_q.where(Reserva.sucursal_destino_id == sucursal_id)
+            comp_q = comp_q.where(Reserva.sucursal_destino_id == sucursal_id)
         total_res = int((await self.db.execute(res_q)).scalar() or 0)
         comp_res = int((await self.db.execute(comp_q)).scalar() or 0)
 
-        # Estados de pedidos.
+        # Estados de pedidos (respeta desde/hasta/sucursal, UTC).
         ped_q = select(PedidoEntrega.estado, func.count()).group_by(PedidoEntrega.estado)
+        if desde is not None:
+            ped_q = ped_q.where(PedidoEntrega.creada_en >= desde)
+        if hasta is not None:
+            ped_q = ped_q.where(PedidoEntrega.creada_en <= hasta)
         if sucursal_id is not None:
             ped_q = ped_q.where(PedidoEntrega.sucursal_id == sucursal_id)
         estados = {e: int(c) for e, c in (await self.db.execute(ped_q)).all()}

@@ -36,7 +36,6 @@ CATEGORIAS_SUPERIORES = frozenset({
     "CAMISA", "CAMISAS", "BLUSA", "BLUSAS", "POLERA", "POLERAS", "REMERA",
     "CHAQUETA", "CHAMARRA", "SACO", "ABRIGO", "CHALECO", "SUDADERA", "TOP",
 })
-EXTENSIONES_PERMITIDAS = (".jpg", ".jpeg", ".png", ".webp")
 PROMPT_PRENDA = (
     "Replace only the current top with the referenced garment, preserving its "
     "color, silhouette, print, logo and fabric details. Keep the person's pose "
@@ -45,34 +44,29 @@ PROMPT_PRENDA = (
 
 
 def _origenes_permitidos() -> list:
-    import os
+    from backend.app.core.decart_imagen import origenes_permitidos as _ops
 
-    crudo = os.getenv("DECART_ORIGENES_PERMITIDOS", "")
-    return [h.strip().lower() for h in crudo.split(",") if h.strip()]
+    return _ops()
 
 
-def validar_imagen_prenda(url: str) -> None:
-    """422 si la URL no es HTTPS válida, de formato permitido u origen no permitido."""
-    try:
-        partes = urlparse(url or "")
-    except Exception:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="URL de prenda inválida")
-    if partes.scheme != "https" or not partes.hostname:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="La imagen de la prenda debe ser HTTPS",
-        )
-    if not partes.path.lower().endswith(EXTENSIONES_PERMITIDAS):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Formato de imagen no permitido (solo JPEG, PNG o WebP)",
-        )
-    permitidos = _origenes_permitidos()
-    if permitidos and partes.hostname.lower() not in permitidos:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Origen de imagen no permitido",
-        )
+async def validar_imagen_prenda(url: str) -> None:
+    """Validación segura delegada al adaptador inyectable (sin red en pruebas).
+
+    Sintaxis + contenido: HTTPS, allowlist obligatoria cuando la integración
+    está habilitada, sin destinos internos, sin redirecciones inseguras,
+    JPEG/PNG/WebP real, tamaño limitado, 512×512 mínimo, timeout, sin
+    almacenar bytes ni registrar URL firmada/contenido/Base64.
+    """
+    from backend.app.core.decart_imagen import obtener_validador
+
+    await obtener_validador().validar(url)
+
+
+def validar_imagen_prenda_sync(url: str) -> None:
+    """Compatibilidad: validación sintáctica sin red (no usar en flujo)."""
+    from backend.app.core.decart_imagen import validar_sintaxis
+
+    validar_sintaxis(url)
 
 
 class ProbadorService:
@@ -116,7 +110,10 @@ class ProbadorService:
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Variante sin recurso de prueba virtual",
             )
-        validar_imagen_prenda(recurso)
+        # Imagen frontal/recurso de catálogo: validación segura inyectable
+        # (HTTPS, allowlist, sin internos, sin redirecciones inseguras,
+        # JPEG/PNG/WebP real, tamaño y 512×512, timeout; sin guardar bytes).
+        await validar_imagen_prenda(recurso)
         return variante, producto, recurso
 
     async def recursoPrueba(self, usuario: Usuario, variante_id: uuid.UUID) -> PruebaVirtualDTO:
@@ -144,11 +141,14 @@ class ProbadorService:
         digest = hash_payload(dto.model_dump(mode="json"))
         try:
             previo = await idem3.reclamar(
-                self.db, clave, digest, recurso_tipo="PROBADOR", ttl_horas=1
+                self.db, clave, digest, recurso_tipo="PROBADOR",
+                operacion="AUTORIZAR", usuario_id=usuario.id, ttl_horas=1,
             )
             if previo is not None and previo.respuesta:
-                # Misma clave + payload devuelve el mismo resultado vigente;
-                # si el token ya expiró se emite uno nuevo (no se reusa).
+                # Ámbito ya aislado por usuario: nunca devolver a otro
+                # usuario un token almacenado. Misma clave + payload
+                # devuelve el mismo resultado vigente; si el token ya
+                # expiró se emite uno nuevo (no se reusa).
                 try:
                     from datetime import datetime as _dt
 
@@ -158,9 +158,11 @@ class ProbadorService:
 
                         exp = exp.replace(tzinfo=_tz.utc)
                     if exp > self.reloj.ahora():
-                        return AutorizacionDTO(**previo.respuesta), False
+                        dto_previo = AutorizacionDTO(**previo.respuesta)
+                        return dto_previo, False
                 except Exception:
-                    return AutorizacionDTO(**previo.respuesta), False
+                    dto_previo = AutorizacionDTO(**previo.respuesta)
+                    return dto_previo, False
                 await self.db.delete(previo)
                 await self.db.flush()
             variante, _, recurso = await self._variante_compatible(dto.variante_id)
@@ -178,7 +180,17 @@ class ProbadorService:
                 )
             except HTTPException:
                 raise
-            expira = self.reloj.ahora() + timedelta(seconds=decart_client.TTL_SEGUNDOS)
+            # Usar expires_at real del proveedor cuando esté disponible.
+            expira = getattr(token, "expires_at", None)
+            try:
+                if expira is None:
+                    raise ValueError("sin expira")
+                if expira.tzinfo is None:
+                    from datetime import timezone as _tz
+
+                    expira = expira.replace(tzinfo=_tz.utc)
+            except Exception:
+                expira = self.reloj.ahora() + timedelta(seconds=decart_client.TTL_SEGUNDOS)
             salida = AutorizacionDTO(
                 client_token=token.client_token, expires_at=expira,
                 modelo=decart_client.MODELO_EXCLUSIVO,
@@ -199,9 +211,12 @@ class ProbadorService:
             )
             await self.db.flush()
             # No guardar el token en la respuesta idempotente más allá de su TTL:
-            # se cachea solo dentro de la ventana de 60 s.
+            # se cachea solo dentro de la ventana de 60 s y en el ámbito del
+            # usuario (nunca se comparte entre clientes).
             await idem3.guardar_respuesta(
-                self.db, clave, salida.model_dump(mode="json")
+                self.db, clave, salida.model_dump(mode="json"),
+                usuario_id=usuario.id, recurso_tipo="PROBADOR",
+                operacion="AUTORIZAR",
             )
             await self.db.commit()
             return salida, True

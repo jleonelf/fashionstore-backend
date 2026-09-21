@@ -12,6 +12,9 @@ from backend.app.schemas.carrito import (
     LineaActualizarDTO, LineaAgregarDTO,
 )
 from backend.app.services.carrito_service import CarritoService
+from backend.app.api.v1.endpoints._errores import (
+    E400, E401, E403, E404, E409_AMBITO, E409_IDEM, E409_NEGOCIO, E422,
+)
 
 router = APIRouter()
 CANALES = ("WEB", "MOVIL")
@@ -30,6 +33,7 @@ def _canal(canal: str) -> str:
     "/mio", response_model=CarritoDTO, summary="Obtener mi carrito activo (CU14)",
     description="Cliente propietario. Crea el carrito ACTIVO si no existe. "
     "Muestra promoción vigente estimada por línea (se congela en el checkout).",
+    responses={401: E401, 403: E403},
 )
 async def obtenerMiCarrito(
     canal: str = Query("WEB", description="WEB o MOVIL"),
@@ -42,8 +46,12 @@ async def obtenerMiCarrito(
 @router.post(
     "/mio/lineas", response_model=CarritoDTO, status_code=status.HTTP_200_OK,
     summary="Agregar línea al carrito (CU14)",
-    description="Idempotente (header Idempotency-Key obligatorio). Agregar no compromete inventario. "
-    "Revalida variante activa.",
+    description="Idempotente (header Idempotency-Key obligatorio, ámbito por "
+    "usuario+operación AGREGAR). Agregar no compromete inventario. Revalida "
+    "variante activa. Misma clave+usuario+payload devuelve el carrito; "
+    "distinto payload 409; otro propietario nunca recibe datos ajenos (409).",
+    responses={400: E400, 401: E401, 403: E403, 404: E404, 409: E409_IDEM, 422: E422},
+    openapi_extra={"headers": ["Idempotency-Key"]},
 )
 async def agregarLinea(
     datos: LineaAgregarDTO,
@@ -59,7 +67,8 @@ async def agregarLinea(
 
 @router.patch(
     "/mio/lineas/{variante_id}", response_model=CarritoDTO, summary="Modificar cantidad (CU14)",
-    description="Idempotente (header Idempotency-Key obligatorio).",
+    description="Idempotente (header Idempotency-Key obligatorio, ámbito por usuario+operación MODIFICAR).",
+    responses={400: E400, 401: E401, 403: E403, 404: E404, 409: E409_IDEM, 422: E422},
 )
 async def modificarLinea(
     variante_id: uuid.UUID,
@@ -76,7 +85,8 @@ async def modificarLinea(
 
 @router.delete(
     "/mio/lineas/{variante_id}", response_model=CarritoDTO, summary="Quitar línea (CU14)",
-    description="Idempotente (header Idempotency-Key obligatorio).",
+    description="Idempotente (header Idempotency-Key obligatorio, ámbito por usuario+operación QUITAR).",
+    responses={400: E400, 401: E401, 403: E403, 404: E404, 409: E409_IDEM},
 )
 async def quitarLinea(
     variante_id: uuid.UUID,
@@ -92,7 +102,8 @@ async def quitarLinea(
 
 @router.delete(
     "/mio", response_model=CarritoDTO, summary="Vaciar carrito (CU14)",
-    description="Idempotente (header Idempotency-Key obligatorio).",
+    description="Idempotente (header Idempotency-Key obligatorio, ámbito por usuario+operación VACIAR).",
+    responses={400: E400, 401: E401, 403: E403, 409: E409_IDEM},
 )
 async def vaciarCarrito(
     canal: str = Query("WEB"),
@@ -108,6 +119,7 @@ async def vaciarCarrito(
 @router.get(
     "/mio/cobertura", response_model=CoberturaDTO, summary="Sucursales que cubren el carrito (CU14)",
     description="Solo lectura, sin bloqueo ni reserva. Ordena primero las que cubren todo.",
+    responses={401: E401, 403: E403},
 )
 async def coberturaCarrito(
     canal: str = Query("WEB"),
@@ -123,7 +135,11 @@ async def coberturaCarrito(
     description="Canal WEB o MOVIL, modalidad RECOJO o DELIVERY, una sola sucursal. Crea venta "
     "PENDIENTE_PAGO, compromete stock 60 min (SELECT FOR UPDATE ordenado + Kardex), congela "
     "precio/descuento/promoción/costo/tarifa y crea el pedido SOLICITADO. Si ninguna sucursal "
-    "cubre todo -> 409 sin efectos. Misma clave + mismo payload -> mismo resultado; distinta -> 409.",
+    "cubre todo o el carrito no tiene cobertura (409) sin efectos. Idempotencia por usuario: "
+    "misma clave+usuario+payload devuelve la venta; distinto payload 409; otra venta del mismo "
+    "UUID de otro propietario nunca se devuelve (409 IDEMPOTENCIA_AMBITO); se verifica que la "
+    "venta pertenece al usuario actual.",
+    responses={400: E400, 401: E401, 403: E403, 404: E404, 409: E409_NEGOCIO, 422: E422},
 )
 async def checkout(
     datos: CheckoutCrearDTO,

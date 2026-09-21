@@ -26,7 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.core.idempotencia import hash_payload, resolver_idempotencia
 from backend.app.core.permisos import es_admin, exigir_sucursal
-from backend.app.core.reloj import RelojSistema, asegurar_utc, calcular_vencimiento
+from backend.app.core.reloj import RelojSistema, asegurar_utc, calcular_vencimiento, entrada_local_a_utc
 from backend.app.models.comercial import DetalleReserva, Reserva
 from backend.app.models.inventario import MovimientoInventario
 from backend.app.models.seguridad import Usuario
@@ -206,9 +206,9 @@ class ReservaService:
             codigo=await self._codigo_unico(),
             estado="PENDIENTE_TRASLADO" if con_traslado else "PENDIENTE",
             fecha_creacion=ahora,
-            fecha_visita=dto.fecha_visita,
+            fecha_visita=(entrada_local_a_utc(dto.fecha_visita) if dto.fecha_visita else None),
             vence_en=(
-                asegurar_utc(dto.fecha_visita) + timedelta(days=1)
+                entrada_local_a_utc(dto.fecha_visita) + timedelta(days=1)
                 if dto.fecha_visita
                 else calcular_vencimiento(ahora, False)
             ),

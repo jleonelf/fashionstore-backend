@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from backend.app.core.reloj import utcnow
 from sqlalchemy import Column, String, Text, Boolean, DateTime, ForeignKey, Date
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
@@ -13,7 +13,7 @@ class Rol(Base):
     nombre = Column(String(50), nullable=False, unique=True)
     descripcion = Column(Text, nullable=True)
     activo = Column(Boolean, nullable=False, default=True)
-    creado_en = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
+    creado_en = Column(DateTime(timezone=True), default=utcnow, nullable=False)
 
     usuarios = relationship("Usuario", back_populates="rol")
 
@@ -29,8 +29,8 @@ class Usuario(Base):
     contrasenia_hash = Column(String(255), nullable=False)
     telefono = Column(String(30), nullable=True)
     estado = Column(String(20), nullable=False, default="ACTIVO")
-    creado_en = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
-    actualizado_en = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    creado_en = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    actualizado_en = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
     rol = relationship("Rol", back_populates="usuarios")
     cliente = relationship("Cliente", back_populates="usuario", uselist=False, cascade="all, delete-orphan")

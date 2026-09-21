@@ -100,6 +100,24 @@ def _proteger_base_productiva():
         )
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _base_determinista(_proteger_base_productiva):
+    """Limpieza determinista una vez por suite (solo base ``*_test``).
+
+    Trunca los datos de negocio de ejecuciones anteriores y recarga la
+    semilla mínima antes del primer test, para que paginación, búsquedas y
+    conteos (CU05/CU06) sean deterministas. Depende de
+    ``_proteger_base_productiva`` para garantizar el orden: primero se
+    rechaza cualquier base que no termine en ``_test``.
+    """
+    import asyncio
+
+    from tests.limpieza_base import limpiar_datos_negocio
+
+    asyncio.run(limpiar_datos_negocio())
+    yield
+
+
 @pytest.fixture
 async def cliente_http() -> AsyncGenerator[AsyncClient, None]:
     transport = ASGITransport(app=app)

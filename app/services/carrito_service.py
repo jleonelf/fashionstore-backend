@@ -116,18 +116,36 @@ class CarritoService:
 
     async def _mutar_con_idempotencia(
         self, usuario: Usuario, canal: str, clave: uuid.UUID, payload: dict, operacion,
+        nombre_operacion: str = "MUTAR",
     ) -> Tuple[CarritoDTO, bool]:
         cliente_id = _exigir_cliente(usuario)
         digest = hash_payload(payload)
+        ambito_op = (nombre_operacion or "MUTAR").upper()
         try:
             previo = await idem3.reclamar(
-                self.db, clave, digest, recurso_tipo="CARRITO"
+                self.db, clave, digest, recurso_tipo="CARRITO",
+                operacion=ambito_op, usuario_id=usuario.id,
             )
             if previo is not None and previo.respuesta:
+                # Defensa: el ámbito ya filtra por usuario, pero nunca
+                # devolver un carrito de otro propietario.
+                duenio = str((previo.respuesta or {}).get("cliente_id") or "")
+                if duenio and duenio != str(cliente_id):
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail={
+                            "codigo": "IDEMPOTENCIA_AMBITO",
+                            "mensaje": "Idempotency-Key en uso por otro propietario",
+                        },
+                    )
                 dto = CarritoDTO(**previo.respuesta)
                 return dto, False
             dto = await operacion(cliente_id, canal)
-            await idem3.guardar_respuesta(self.db, clave, dto.model_dump(mode="json"))
+            await idem3.guardar_respuesta(
+                self.db, clave, dto.model_dump(mode="json"),
+                usuario_id=usuario.id, recurso_tipo="CARRITO",
+                operacion=ambito_op,
+            )
             await self.db.commit()
             return dto, True
         except HTTPException:
@@ -166,6 +184,7 @@ class CarritoService:
             usuario, canal, clave,
             {"op": "agregar", "canal": canal, **dto.model_dump(mode="json")},
             await self._op_agregar(dto),
+            "AGREGAR",
         )
 
     async def modificar(
@@ -184,6 +203,7 @@ class CarritoService:
             usuario, canal, clave,
             {"op": "modificar", "canal": canal, "variante_id": str(variante_id), **dto.model_dump(mode="json")},
             _op,
+            "MODIFICAR",
         )
 
     async def quitar(self, usuario, variante_id: uuid.UUID, canal="WEB", clave=None) -> Tuple[CarritoDTO, bool]:
@@ -199,6 +219,7 @@ class CarritoService:
             usuario, canal, clave,
             {"op": "quitar", "canal": canal, "variante_id": str(variante_id)},
             _op,
+            "QUITAR",
         )
 
     async def vaciar(self, usuario, canal="WEB", clave=None) -> Tuple[CarritoDTO, bool]:
@@ -209,7 +230,8 @@ class CarritoService:
             return await self._armar_dto(carrito)
 
         return await self._mutar_con_idempotencia(
-            usuario, canal, clave, {"op": "vaciar", "canal": canal}, _op
+            usuario, canal, clave, {"op": "vaciar", "canal": canal}, _op,
+            "VACIAR",
         )
 
     # ---------------- cobertura ----------------
@@ -253,6 +275,15 @@ class CarritoService:
         try:
             reintento = await resolver_idempotencia(self.db, Venta, clave, digest)
             if reintento is not None:
+                # Ámbito por actor: nunca devolver la venta de otro cliente.
+                if str(reintento.cliente_id or "") != str(cliente_id):
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail={
+                            "codigo": "IDEMPOTENCIA_AMBITO",
+                            "mensaje": "Idempotency-Key en uso por otro propietario",
+                        },
+                    )
                 pedido = await self.pedido_repo.buscarPorVenta(reintento.id)
                 return CheckoutRespuestaDTO(
                     venta_id=reintento.id, numero=reintento.numero,
@@ -268,10 +299,21 @@ class CarritoService:
             if "clave_idempotencia" in str(getattr(e, "orig", e)).lower():
                 existente = await self.venta_repo.buscarPorClave(clave)
                 if existente is not None:
+                    if str(existente.cliente_id or "") != str(cliente_id):
+                        raise HTTPException(
+                            status_code=status.HTTP_409_CONFLICT,
+                            detail={
+                                "codigo": "IDEMPOTENCIA_AMBITO",
+                                "mensaje": "Idempotency-Key en uso por otro propietario",
+                            },
+                        )
                     if existente.hash_solicitud != digest:
                         raise HTTPException(
                             status_code=status.HTTP_409_CONFLICT,
-                            detail="Idempotency-Key ya usada con otra solicitud",
+                            detail={
+                                "codigo": "IDEMPOTENCIA_CONFLICTO",
+                                "mensaje": "Idempotency-Key ya usada con otra solicitud",
+                            },
                         )
                     pedido = await self.pedido_repo.buscarPorVenta(existente.id)
                     return CheckoutRespuestaDTO(

@@ -12,6 +12,7 @@ from backend.app.core.config import settings
 from tests.helpers_ciclo2 import crear_cliente, sucursal_semilla
 from tests.helpers_ciclo3 import (
     clave, crear_variante_probador, desinstalar_decart_falso, instalar_decart_falso,
+    instalar_validador_falso,
 )
 
 
@@ -19,10 +20,16 @@ from tests.helpers_ciclo3 import (
 def _limpio(monkeypatch):
     monkeypatch.setattr(settings, "DECART_ENABLED", True)
     monkeypatch.setattr(settings, "DECART_API_KEY", "dk_test_falsa")
+    monkeypatch.setattr(settings, "DECART_ORIGENES_PERMITIDOS", "cdn.fashionstore.test")
+    monkeypatch.setenv("DECART_ORIGENES_PERMITIDOS", "cdn.fashionstore.test")
     rate_limit.reiniciar_limites()
     capturas = instalar_decart_falso("tok-corto-prueba")
+    from tests.helpers_ciclo3 import desinstalar_validador_falso, instalar_validador_falso
+
+    instalar_validador_falso("ok")
     yield capturas
     desinstalar_decart_falso()
+    desinstalar_validador_falso()
     rate_limit.reiniciar_limites()
 
 

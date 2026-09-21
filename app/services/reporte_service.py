@@ -12,6 +12,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.core.permisos import es_admin, exigir_sucursal
+from backend.app.core.reloj import entrada_local_a_utc
 from backend.app.models.seguridad import Usuario
 from backend.app.repositories.sucursal_repository import SucursalRepository
 from backend.app.repositories.venta_repository import VentaRepository
@@ -46,6 +47,8 @@ class ReporteService:
         if sucursal is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sucursal no encontrada")
         con_costos = rol in ("ADMINISTRADOR", "ENCARGADO")
+        desde = entrada_local_a_utc(desde) if desde is not None else None
+        hasta = entrada_local_a_utc(hasta) if hasta is not None else None
         ventas, total = await self.venta_repo.porSucursal(
             sucursal_id, desde=desde, hasta=hasta, limit=limit, offset=offset
         )

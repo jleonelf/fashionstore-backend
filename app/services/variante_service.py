@@ -110,7 +110,7 @@ class VarianteService:
         if not variante:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Variante no encontrada")
 
-        if dto.sku is not None:
+        if "sku" in dto.model_fields_set and dto.sku is not None:
             nuevo_sku = dto.sku.strip()
             if nuevo_sku != variante.sku:
                 existente = await self.variante_repo.buscarPorSku(nuevo_sku)
@@ -118,8 +118,8 @@ class VarianteService:
                     raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Ya existe una variante con SKU '{nuevo_sku}'")
                 variante.sku = nuevo_sku
 
-        if dto.codigo_barras is not None:
-            nuevo_cb = dto.codigo_barras.strip() if dto.codigo_barras.strip() else None
+        if "codigo_barras" in dto.model_fields_set:
+            nuevo_cb = dto.codigo_barras.strip() if dto.codigo_barras and dto.codigo_barras.strip() else None
             if nuevo_cb != variante.codigo_barras:
                 if nuevo_cb:
                     existente = await self.variante_repo.buscarPorCodigoBarras(nuevo_cb)
@@ -127,14 +127,17 @@ class VarianteService:
                         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Ya existe una variante con código de barras '{nuevo_cb}'")
                 variante.codigo_barras = nuevo_cb
 
-        if dto.precio is not None:
+        if "precio" in dto.model_fields_set and dto.precio is not None:
             variante.precio = dto.precio
-        if dto.peso_gramos is not None:
+
+        if "peso_gramos" in dto.model_fields_set:
             variante.peso_gramos = dto.peso_gramos
-        if dto.activa is not None:
+
+        if "activa" in dto.model_fields_set and dto.activa is not None:
             variante.activa = dto.activa
-        if dto.recurso_prueba_virtual is not None:
-            variante.recurso_prueba_virtual = dto.recurso_prueba_virtual
+
+        if "recurso_prueba_virtual" in dto.model_fields_set:
+            variante.recurso_prueba_virtual = dto.recurso_prueba_virtual.strip() if dto.recurso_prueba_virtual and dto.recurso_prueba_virtual.strip() else None
 
         try:
             await self.variante_repo.actualizar(variante)

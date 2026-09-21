@@ -9,6 +9,7 @@ from backend.app.core.dependencias import get_usuario_actual
 from backend.app.models.seguridad import Usuario
 from backend.app.schemas.probador_ia import DashboardDTO
 from backend.app.services.dashboard_service import DashboardService
+from backend.app.api.v1.endpoints._errores import E400, E401, E403, E404
 
 router = APIRouter()
 
@@ -18,7 +19,9 @@ router = APIRouter()
     summary="Dashboard e indicadores (CU19)",
     description="Ventas, ingresos y margen por periodo/sucursal, ticket promedio, top productos, "
     "stock crítico y valorización, conversión de reservas, estados de pedidos y efectividad de "
-    "promociones. Fechas UTC, RBAC (ADMIN global; ENCARGADO su sucursal) y respuestas tipadas.",
+    "promociones. Todos los indicadores aplicables respetan desde/hasta/sucursal_id en UTC con "
+    "desde<=hasta. RBAC (ADMIN global; ENCARGADO su sucursal) y respuestas tipadas con Decimal.",
+    responses={400: E400, 401: E401, 403: E403, 404: E404},
 )
 async def consultarDashboard(
     desde: Optional[datetime] = Query(None),

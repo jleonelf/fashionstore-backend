@@ -78,7 +78,11 @@ class ReportePedirDTO(BaseModel):
 
 
 class ReporteRespuestaDTO(BaseModel):
-    funcion_usada: str
+    funcion_usada: Literal[
+        "ventasPorSucursal", "inventarioPorSucursal", "ventasPorTemporada",
+        "stockCritico", "topVendidos", "efectividadReservas",
+        "rotacionPorTemporada",
+    ]
     parametros: dict
     datos: dict
     narrativa: str

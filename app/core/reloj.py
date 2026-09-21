@@ -1,10 +1,14 @@
-"""Reloj UTC inyectable (Ciclo 2, Entrega 1).
+"""Política temporal de FashionStore.
 
-Toda la logica de vigencia usa instantes UTC. Prohibido datetime.utcnow()
-en codigo nuevo: usar RelojSistema.ahora() o inyectar RelojFijo en pruebas
-(job de expiracion CU24 con reloj simulado).
+La zona civil del negocio es America/La_Paz. Persistencia y comparaciones usan
+instantes UTC conscientes de zona; presentación e inputs locales usan Bolivia.
+Nunca se depende de la zona configurada en el sistema operativo del servidor.
 """
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
+
+
+ZONA_NEGOCIO = ZoneInfo("America/La_Paz")
 
 
 class RelojSistema:
@@ -33,6 +37,27 @@ class RelojFijo:
 def utcnow() -> datetime:
     """Atajo productivo equivalente a RelojSistema().ahora()."""
     return datetime.now(timezone.utc)
+
+
+def ahora_bolivia() -> datetime:
+    """Hora civil actual del negocio, siempre con offset -04:00."""
+    return datetime.now(ZONA_NEGOCIO)
+
+
+def a_hora_bolivia(instante: datetime) -> datetime:
+    """Convierte un instante a America/La_Paz para respuesta/presentación."""
+    return asegurar_utc(instante).astimezone(ZONA_NEGOCIO)
+
+
+def entrada_local_a_utc(instante: datetime) -> datetime:
+    """Normaliza fechas recibidas del usuario.
+
+    Si el cliente omite offset, se interpreta expresamente como hora boliviana,
+    nunca como hora local del servidor. Con offset, se respeta el instante.
+    """
+    if instante.tzinfo is None:
+        instante = instante.replace(tzinfo=ZONA_NEGOCIO)
+    return instante.astimezone(timezone.utc)
 
 
 def asegurar_utc(instante: datetime) -> datetime:

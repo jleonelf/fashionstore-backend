@@ -183,6 +183,9 @@ class VentaService:
         existe = await self.db.get(Cliente, cliente_id)
         if existe is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cliente no encontrado")
+        from backend.app.core.reloj import entrada_local_a_utc
+        desde = entrada_local_a_utc(desde) if desde is not None else None
+        hasta = entrada_local_a_utc(hasta) if hasta is not None else None
         ventas, total = await self.venta_repo.porCliente(
             cliente_id, desde=desde, hasta=hasta, limit=limit, offset=offset
         )

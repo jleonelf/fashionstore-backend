@@ -36,11 +36,13 @@ class FiltrosBusqueda:
     talla: Optional[str] = None
     color: Optional[str] = None
     temporada: Optional[str] = None
-    precio_min: Optional[float] = None
-    precio_max: Optional[float] = None
+    precio_min: Optional[Any] = None
+    precio_max: Optional[Any] = None
     texto: str = ""
 
     def como_dict(self) -> dict[str, Any]:
+        # Importes internos en Decimal; el encoder JSON los expone como
+        # número sin usar float en comparaciones ni cálculos.
         return {k: v for k, v in self.__dict__.items() if v is not None}
 
 
@@ -83,14 +85,28 @@ def interpretar_determinista(texto: str) -> FiltrosBusqueda:
         if palabra in bajo:
             filtros.temporada = valor
             break
+    from decimal import Decimal as _Decimal
+
     barato = any(p in bajo for p in ("barato", "económ", "econom", "oferta", "descuento"))
     if barato:
-        filtros.precio_max = 150.0
+        filtros.precio_max = _Decimal("150.00")
     premium = any(p in bajo for p in ("premium", "caro", "lujo", "exclusiv"))
     if premium:
-        filtros.precio_min = 300.0
-    numeros = re.findall(r"(\d+(?:[.,]\d+)?)\s*(bs|usd|\$)?", bajo)
-    montos = [float(n.replace(",", ".")) for n, _ in numeros if float(n.replace(",", ".")) > 0]
+        filtros.precio_min = _Decimal("300.00")
+
+    def _a_decimal(txt: str) -> _Decimal | None:
+        try:
+            val = _Decimal(txt.replace(",", "."))
+            return val if val > 0 else None
+        except Exception:
+            return None
+
+    montos: list = []
+    hallazgos = re.findall(r"(\d+(?:[.,]\d+)?)\s*(bs|usd|\$)?", bajo)
+    for n, _ in hallazgos:
+        dec = _a_decimal(n)
+        if dec is not None:
+            montos.append(dec)
     if len(montos) >= 2:
         filtros.precio_min, filtros.precio_max = sorted(montos[:2])
     elif len(montos) == 1 and ("hasta" in bajo or "menos" in bajo or "max" in bajo):
@@ -153,12 +169,14 @@ class ProveedorGemini(ProveedorIA):
                 return interpretar_determinista(texto)
             permitido = {"categoria", "talla", "color", "temporada", "precio_min", "precio_max"}
             limpio = {k: crudo.get(k) for k in permitido}
+            from decimal import Decimal as _Decimal
+
             base = interpretar_determinista(texto)
             for k, v in limpio.items():
                 if isinstance(v, str) and v and len(v) <= 40 and not rechazar_inyeccion(v):
                     setattr(base, k, v.upper() if k != "texto" else v)
                 if isinstance(v, (int, float)) and 0 <= v <= 100000:
-                    setattr(base, k, float(v))
+                    setattr(base, k, _Decimal(str(v)))
             return base
         except Exception:
             return interpretar_determinista(texto)
@@ -167,7 +185,33 @@ class ProveedorGemini(ProveedorIA):
         if not settings.GEMINI_API_KEY:
             return narrar_determinista(contexto, datos)
         try:
-            return narrar_determinista(contexto, datos) + " (narrativa asistida por Gemini, validada)."
+            import json
+            import httpx
+
+            prompt = (
+                "Redacta en espanol un resumen ejecutivo breve, claro y sin Markdown. "
+                "Usa exclusivamente los datos JSON proporcionados; no inventes cifras, "
+                "causas ni recomendaciones. Si no hay registros, indicalo de forma directa. "
+                f"Reporte: {contexto[:120]}. Datos: "
+                f"{json.dumps(datos, ensure_ascii=False, default=str)[:12000]}"
+            )
+            async with httpx.AsyncClient(timeout=settings.GEMINI_TIMEOUT_SECONDS) as cli:
+                respuesta = await cli.post(
+                    f"https://generativelanguage.googleapis.com/v1beta/models/"
+                    f"{settings.GEMINI_MODEL}:generateContent",
+                    headers={"x-goog-api-key": settings.GEMINI_API_KEY},
+                    json={"contents": [{"parts": [{"text": prompt}]}]},
+                )
+            if respuesta.status_code != 200:
+                return narrar_determinista(contexto, datos)
+            cuerpo = respuesta.json()
+            texto = str(
+                cuerpo.get("candidates", [{}])[0]
+                .get("content", {})
+                .get("parts", [{}])[0]
+                .get("text", "")
+            ).strip()
+            return texto[:1600] if texto else narrar_determinista(contexto, datos)
         except Exception:
             return narrar_determinista(contexto, datos)
 

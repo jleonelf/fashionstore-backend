@@ -130,32 +130,43 @@ class ProductoService:
         if not producto:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Producto no encontrado")
 
-        # Validar referencias si cambian
-        if dto.categoria_id is not None:
+        # Validar y actualizar campos si fueron incluidos en la petición (model_fields_set)
+        if "categoria_id" in dto.model_fields_set:
             if dto.categoria_id:
                 cat = await self.maestro_repo.buscarCategoriaPorId(dto.categoria_id)
                 if not cat:
                     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Categoría no encontrada")
                 if not cat.activo:
                     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Categoría inactiva")
-            producto.categoria_id = dto.categoria_id
-        if dto.proveedor_principal_id is not None:
+                producto.categoria_id = dto.categoria_id
+            else:
+                producto.categoria_id = None
+
+        if "proveedor_principal_id" in dto.model_fields_set:
             if dto.proveedor_principal_id:
                 prov = await self.proveedor_repo.buscarPorId(dto.proveedor_principal_id)
                 if not prov:
                     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Proveedor principal no encontrado")
-            producto.proveedor_principal_id = dto.proveedor_principal_id
-        if dto.nombre is not None:
+                producto.proveedor_principal_id = dto.proveedor_principal_id
+            else:
+                producto.proveedor_principal_id = None
+
+        if "nombre" in dto.model_fields_set and dto.nombre is not None:
             producto.nombre = dto.nombre.strip()
-        if dto.descripcion is not None:
-            producto.descripcion = dto.descripcion.strip() if dto.descripcion else None
-        if dto.genero is not None:
-            producto.genero = dto.genero.strip() if dto.genero else None
-        if dto.marca is not None:
-            producto.marca = dto.marca.strip() if dto.marca else None
-        if dto.precio_base is not None:
+
+        if "descripcion" in dto.model_fields_set:
+            producto.descripcion = dto.descripcion.strip() if dto.descripcion and dto.descripcion.strip() else None
+
+        if "genero" in dto.model_fields_set:
+            producto.genero = dto.genero.strip() if dto.genero and dto.genero.strip() else None
+
+        if "marca" in dto.model_fields_set:
+            producto.marca = dto.marca.strip() if dto.marca and dto.marca.strip() else None
+
+        if "precio_base" in dto.model_fields_set and dto.precio_base is not None:
             producto.precio_base = dto.precio_base
-        if dto.activo is not None:
+
+        if "activo" in dto.model_fields_set and dto.activo is not None:
             producto.activo = dto.activo
 
         try:

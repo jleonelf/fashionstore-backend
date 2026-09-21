@@ -59,6 +59,11 @@ class PedidoDTO(BaseModel):
     costo_entrega: Decimal
     codigo_recojo: Optional[str] = None
     creada_en: datetime
+    puede_cancelar: bool = False
+    puede_transicionar: bool = False
+    siguiente_estado: Optional[
+        Literal["PREPARADO", "LISTO_RECOJO", "EN_REPARTO", "RECOGIDO", "ENTREGADO"]
+    ] = None
 
 
 class PedidoListaDTO(BaseModel):

@@ -11,6 +11,7 @@ from backend.app.schemas.promocion import (
     PromocionDTO, PromocionListaDTO,
 )
 from backend.app.services.promocion_service import PromocionService
+from backend.app.api.v1.endpoints._errores import E400, E401, E403, E404, E409_NEGOCIO
 
 router = APIRouter()
 
@@ -20,6 +21,7 @@ router = APIRouter()
     summary="Crear promoción (CU22)",
     description="Solo ADMINISTRADOR. Tipo PORCENTAJE (0-100) o MONTO_FIJO, vigencia coherente en UTC, "
     "código único. No acumulables: el checkout aplica el mayor descuento con desempate por ID.",
+    responses={400: E400, 401: E401, 403: E403, 409: E409_NEGOCIO, 422: E400},
 )
 async def crearPromocion(
     datos: PromocionCrearDTO,

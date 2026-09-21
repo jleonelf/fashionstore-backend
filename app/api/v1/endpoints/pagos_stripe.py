@@ -10,6 +10,9 @@ from backend.app.core.idempotencia import validar_clave_idempotencia
 from backend.app.models.seguridad import Usuario
 from backend.app.schemas.pago_stripe import EstadoPagoDTO, IntencionCrearDTO, IntencionDTO
 from backend.app.services.stripe_service import StripeService
+from backend.app.api.v1.endpoints._errores import (
+    E400, E401, E403, E404, E409_IDEM, E409_NEGOCIO, E502, E503_STRIPE,
+)
 
 router = APIRouter()
 
@@ -17,9 +20,11 @@ router = APIRouter()
 @router.post(
     "/stripe/intenciones", response_model=IntencionDTO, status_code=status.HTTP_201_CREATED,
     summary="Crear o reutilizar PaymentIntent (CU15)",
-    description="Cliente propietario o Administrador. Una intención por venta (se reutiliza). "
-    "Sin claves responde 503 tipado; la app y demás módulos siguen operativos. "
-    "Requiere header Idempotency-Key.",
+    description="Cliente propietario o Administrador. Una intención por venta: FAILED reutiliza el "
+    "PaymentIntent vigente; CANCELED crea uno nuevo (un PI cancelado no procesa pagos). Sin claves "
+    "responde 503 STRIPE_DESHABILITADO; con clave live o fuera de Test Mode responde 503 "
+    "STRIPE_MODO_NO_PERMITIDO (sin exponer la clave). Requiere header Idempotency-Key.",
+    responses={400: E400, 401: E401, 403: E403, 404: E404, 409: E409_NEGOCIO, 502: E502, 503: E503_STRIPE},
 )
 async def crearIntencion(
     datos: IntencionCrearDTO,
@@ -35,8 +40,10 @@ async def crearIntencion(
 @router.post(
     "/stripe/intenciones/reintento", response_model=IntencionDTO, status_code=status.HTTP_200_OK,
     summary="Reintentar pago dentro de la ventana (CU15)",
-    description="Reutiliza la intención vigente mientras la venta siga PENDIENTE_PAGO y no expire. "
-    "Vencida -> 409.",
+    description="Reutiliza la intención vigente (FAILED) o crea una nueva (CANCELED) mientras la venta "
+    "siga PENDIENTE_PAGO y no expire. Actualiza el registro Pago a la intención vigente; un webhook "
+    "tardío de la intención reemplazada se ignora sin efectos. Vencida -> 409.",
+    responses={400: E400, 401: E401, 403: E403, 404: E404, 409: E409_NEGOCIO, 502: E502, 503: E503_STRIPE},
 )
 async def reintentarIntencion(
     datos: IntencionCrearDTO,
@@ -53,6 +60,7 @@ async def reintentarIntencion(
     "/stripe/estado/{venta_id}", response_model=EstadoPagoDTO,
     summary="Consultar estado de pago para polling (CU15)",
     description="El frontend consulta; nunca confirma pagos directamente.",
+    responses={401: E401, 403: E403, 404: E404},
 )
 async def estadoPago(
     venta_id: uuid.UUID,
@@ -66,8 +74,11 @@ async def estadoPago(
     "/stripe/webhook", status_code=status.HTTP_200_OK,
     summary="Webhook firmado de Stripe (CU15)",
     description="Única confirmación definitiva. Verifica la firma con el cuerpo HTTP crudo; "
-    "firma inválida -> 400. Eventos duplicados y fuera de orden son idempotentes.",
+    "firma inválida -> 400. Rechaza eventos con livemode=true (400) sin modificar pago, venta, "
+    "pedido, inventario o Kardex. Eventos duplicados y fuera de orden son idempotentes; solo el "
+    "webhook firmado de la intención vigente confirma la venta.",
     response_model=dict,
+    responses={400: E400, 401: E401, 404: E404},
 )
 async def webhookStripe(
     request: Request,
@@ -90,6 +101,7 @@ async def webhookStripe(
     description="Solo ADMINISTRADOR (job manual en pruebas). Advisory lock + SKIP LOCKED; "
     "cancela y libera el compromiso exactamente una vez.",
     response_model=dict,
+    responses={401: E401, 403: E403},
 )
 async def ejecutarExpiracion(
     db: AsyncSession = Depends(get_db),

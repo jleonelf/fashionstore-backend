@@ -76,6 +76,16 @@ class StripeService:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Venta ya pagada")
         if venta.expira_en is not None and venta.expira_en <= self.reloj.ahora():
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ventana de pago vencida")
+        # Test Mode estricto antes de tocar la pasarela (sin exponer la clave).
+        if not settings.STRIPE_ENABLED or not settings.STRIPE_SECRET_KEY:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={
+                    "codigo": "STRIPE_DESHABILITADO",
+                    "mensaje": "Pasarela en modo prueba no configurada.",
+                },
+            )
+        gw.exigir_test_mode()
         digest = hash_payload({"venta_id": str(venta_id)})
         try:
             existente = await self.pago_repo.buscarPorClave(clave)
@@ -83,20 +93,46 @@ class StripeService:
                 if existente.hash_solicitud != digest:
                     raise HTTPException(
                         status_code=status.HTTP_409_CONFLICT,
-                        detail="Idempotency-Key ya usada con otra solicitud",
+                        detail={
+                            "codigo": "IDEMPOTENCIA_CONFLICTO",
+                            "mensaje": "Idempotency-Key ya usada con otra solicitud",
+                        },
                     )
                 return self._a_intencion(venta, existente), False
             pago_previo = await self._pago_stripe_de_venta(venta.id)
-            gateway = gw.obtener_gateway()  # 503 si deshabilitado
+            gateway = gw.obtener_gateway()  # 503 si deshabilitado o no test
+            # Reintento explícito: FAILED reutiliza el PI vigente; CANCELED
+            # exige uno nuevo (un PI cancelado ya no puede procesar un pago).
+            referencia: Optional[str] = pago_previo.referencia_externa if pago_previo else None
+            if referencia:
+                try:
+                    pi_vigente = await gateway.consultar_intencion(referencia)
+                    if pi_vigente.estado == "CANCELED":
+                        referencia = None  # forzar creación de una nueva intención
+                except HTTPException:
+                    pass
             inten = await gateway.crear_o_reutilizar_intencion(
                 venta_id=str(venta.id),
                 monto_centavos=_centavos(venta.total),
                 moneda=settings.STRIPE_CURRENCY or "usd",
                 idempotency_key=str(clave),
-                referencia_existente=pago_previo.referencia_externa if pago_previo else None,
+                referencia_existente=referencia,
             )
             if pago_previo is not None:
                 pago = pago_previo
+                # Intención reemplazada (cancelada -> nueva): actualizar el
+                # registro Pago a la intención vigente y rearmar a PENDIENTE.
+                # Se preservan idempotencia, venta e inventario; solo el
+                # webhook firmado de la intención vigente puede confirmar.
+                if pago.referencia_externa != inten.id:
+                    pago.referencia_externa = inten.id
+                    pago.estado = "PENDIENTE"
+                    pago.pagado_en = None
+                    await self.db.flush()
+                elif pago.estado == "RECHAZADO":
+                    # Reintento tras FAILED con el mismo PI: rearmar ventana.
+                    pago.estado = "PENDIENTE"
+                    await self.db.flush()
             else:
                 pago = Pago(
                     contexto="VENTA", reserva_id=None, venta_id=venta.id,
@@ -155,26 +191,56 @@ class StripeService:
 
     # ---------------- webhook (única confirmación definitiva) ----------------
     async def confirmarWebhook(self, cuerpo_crudo: bytes, firma: Optional[str], evento: dict) -> dict:
+        # La firma se verifica siempre sobre el cuerpo crudo, incluso para
+        # eventos live que luego se rechazan sin efectos.
         try:
             gw.verificar_firma_stripe(cuerpo_crudo, firma, settings.STRIPE_WEBHOOK_SECRET or "")
         except gw.FirmaStripeInvalida as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Firma inválida: {e}")
+        # Test Mode estricto: un evento live se rechaza sin modificar pago,
+        # venta, pedido, inventario o Kardex.
+        if evento.get("livemode") is True:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "codigo": "STRIPE_MODO_NO_PERMITIDO",
+                    "mensaje": "Evento live rechazado; solo Test Mode",
+                },
+            )
         tipo = str(evento.get("type", ""))
+        tipos_soportados = {
+            "payment_intent.succeeded",
+            "payment_intent.payment_failed",
+            "payment_intent.canceled",
+        }
+        # Stripe puede enviar eventos administrativos si el endpoint fue
+        # configurado con "todos los eventos". Confirmarlos con 200 evita
+        # reintentos, pero nunca deben buscar pagos ni producir efectos.
+        if tipo not in tipos_soportados:
+            return {"evento": tipo, "estado": "IGNORADO"}
         objeto = evento.get("data", {}).get("object", {}) if isinstance(evento.get("data"), dict) else {}
         pi_id = str(objeto.get("id", ""))
+        if not pi_id:
+            rel = evento.get("related_object", {}) if isinstance(evento.get("related_object"), dict) else {}
+            pi_id = str(rel.get("id", ""))
         if not pi_id:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Evento sin payment_intent")
         try:
             pago = await self._pago_por_referencia(pi_id)
             if pago is None:
-                # Reintento/orden: evento de intención desconocida -> 404 sin efectos.
+                # Reintento/orden o webhook tardío de una intención ya
+                # reemplazada (el Pago apunta a la vigente): 404 sin efectos.
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Intención no registrada")
+            # Solo la intención vigente puede confirmar: si el Pago ya apunta
+            # a otra intención (reemplazo tras canceled), ignorar sin efectos.
+            if (pago.referencia_externa or "") != pi_id:
+                return {"payment_intent": pi_id, "estado": "IGNORADO"}
             if tipo in ("payment_intent.succeeded",):
                 await self._aplicar_aprobado(pago.venta_id, pi_id)
                 await self.db.commit()
                 return {"payment_intent": pi_id, "estado": "APROBADO"}
             if tipo in ("payment_intent.payment_failed", "payment_intent.canceled"):
-                await self._aplicar_rechazo(pago.venta_id, pi_id)
+                await self._aplicar_rechazo(pago.venta_id, pi_id, tipo)
                 await self.db.commit()
                 return {"payment_intent": pi_id, "estado": "RECHAZADO"}
             # Evento desconocido: idempotente, sin efectos.
@@ -260,7 +326,7 @@ class StripeService:
             pedido.estado = "PREPARADO"  # la venta pagada entra a preparación
             await self.db.flush()
 
-    async def _aplicar_rechazo(self, venta_id: uuid.UUID, pi_id: str) -> None:
+    async def _aplicar_rechazo(self, venta_id: uuid.UUID, pi_id: str, tipo: str = "") -> None:
         venta = await self._bloquear_venta(venta_id)
         estado = self._estado(venta)
         pago = await self._pago_por_referencia(pi_id)
@@ -270,6 +336,9 @@ class StripeService:
             return  # fuera de orden: aprobado previo gana
         if estado in ("PAGADA", "CANCELADA", "DEVUELTA"):
             return  # terminal: sin efectos
+        # FAILED reutiliza el mismo PI en el reintento; CANCELED exige uno
+        # nuevo (el PI cancelado ya no puede procesar un pago). Ambos dejan
+        # la venta en PENDIENTE_PAGO dentro de la ventana, sin consumir stock.
         pago.estado = "RECHAZADO"
         await self.db.flush()
         # Rechazo NO confirma venta ni consume stock: se mantiene la ventana.
@@ -279,8 +348,15 @@ class StripeService:
         """Cancela PENDIENTE_PAGO vencidas con advisory lock y SKIP LOCKED.
 
         Libera el compromiso exactamente una vez (Kardex LIBERACION_DIGITAL con
-        unicidad de efecto). Retorna resumen para job y endpoint manual.
+        unicidad de efecto). Ante carrera con el webhook, una fila bloqueada
+        por la otra transacción se omite con SKIP LOCKED en la primera pasada;
+        por eso se relee sin bloqueo y se reintenta con espera acotada hasta
+        que no queden vencidas pendientes: nunca queda PENDIENTE_PAGO cuando
+        webhook y expirador ya finalizaron. Retorna resumen para job y
+        endpoint manual.
         """
+        import asyncio
+
         try:
             lock = await self.db.execute(select(text("pg_try_advisory_lock(9100315)")))
             tiene = bool(lock.scalar())
@@ -289,16 +365,34 @@ class StripeService:
         if not tiene:
             return {"procesadas": 0, "canceladas": [], "omitidas": [], "bloqueo_activo": False}
         ahora = self.reloj.ahora()
-        r = await self.db.execute(
-            text(
-                "SELECT id FROM comercial.ventas WHERE estado = 'PENDIENTE_PAGO' "
-                "AND expira_en IS NOT NULL AND expira_en <= :ahora "
-                "ORDER BY expira_en LIMIT :lote FOR UPDATE SKIP LOCKED"
-            ),
-            {"ahora": ahora, "lote": lote},
-        )
-        ids = [row[0] for row in r.all()]
         canceladas, omitidas, errores = [], [], []
+        procesadas = 0
+        for intento in range(5):
+            r = await self.db.execute(
+                text(
+                    "SELECT id FROM comercial.ventas WHERE estado = 'PENDIENTE_PAGO' "
+                    "AND expira_en IS NOT NULL AND expira_en <= :ahora "
+                    "ORDER BY expira_en LIMIT :lote FOR UPDATE SKIP LOCKED"
+                ),
+                {"ahora": ahora, "lote": lote},
+            )
+            ids = [row[0] for row in r.all()]
+            if not ids:
+                # Sin candidatos: distinguir "nada vencido" de "todo
+                # bloqueado por el webhook". Relectura sin bloqueo.
+                restantes = await self.db.execute(
+                    text(
+                        "SELECT count(*) FROM comercial.ventas WHERE estado = 'PENDIENTE_PAGO' "
+                        "AND expira_en IS NOT NULL AND expira_en <= :ahora"
+                    ),
+                    {"ahora": ahora},
+                )
+                if int(restantes.scalar() or 0) == 0:
+                    break
+                # El webhook aún retiene filas: espera acotada y reintento.
+                await asyncio.sleep(0.05 * (intento + 1))
+                continue
+            procesadas += len(ids)
         for vid in ids:
             try:
                 venta = await self._bloquear_venta(uuid.UUID(str(vid)))
@@ -350,6 +444,6 @@ class StripeService:
         except Exception:
             pass
         return {
-            "procesadas": len(ids), "canceladas": canceladas,
+            "procesadas": procesadas, "canceladas": canceladas,
             "omitidas": omitidas, "errores": errores, "bloqueo_activo": True,
         }

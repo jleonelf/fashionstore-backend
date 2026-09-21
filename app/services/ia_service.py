@@ -42,7 +42,7 @@ def _sanitizar(texto: str, maximo: int = LIMITE_AUDITORIA_TEXTO) -> str:
 class IAService:
     # Catálogo cerrado de funciones de lectura (CU21/CU25). Nunca SQL libre.
     FUNCIONES_SEGURAS = (
-        "ventasPorSucursal", "ventasPorTemporada", "stockCritico",
+        "ventasPorSucursal", "inventarioPorSucursal", "ventasPorTemporada", "stockCritico",
         "topVendidos", "efectividadReservas", "rotacionPorTemporada",
     )
 
@@ -115,11 +115,15 @@ class IAService:
                 cat_up = (cat_nombre or "").upper()
                 if filtros.categoria not in cat_up and filtros.categoria not in nombre_up:
                     continue
-            precio = float(variante.precio or 0)
-            if filtros.precio_min is not None and precio < filtros.precio_min:
-                continue
-            if filtros.precio_max is not None and precio > filtros.precio_max:
-                continue
+            precio = Decimal(str(variante.precio or 0))
+            if filtros.precio_min is not None:
+                minimo = Decimal(str(filtros.precio_min))
+                if precio < minimo:
+                    continue
+            if filtros.precio_max is not None:
+                maximo = Decimal(str(filtros.precio_max))
+                if precio > maximo:
+                    continue
             salida.append((variante, producto, int(disp or 0)))
             if len(salida) >= limite:
                 break
@@ -223,6 +227,12 @@ class IAService:
     # ---------------- CU21 reportes generativos (solo lectura) ----------------
     def _elegir_funcion(self, consulta: str) -> tuple[str, dict]:
         bajo = (consulta or "").lower()
+        menciona_inventario = any(p in bajo for p in ("inventario", "stock", "existencia"))
+        menciona_sucursal = any(p in bajo for p in ("sucursal", "tienda", "local"))
+        if menciona_inventario and menciona_sucursal:
+            return "inventarioPorSucursal", {}
+        if any(p in bajo for p in ("stock crítico", "stock critico", "inventario bajo", "agot")):
+            return "stockCritico", {}
         if any(p in bajo for p in ("sucursal", "tienda", "local", "vendió menos", "vendio menos", "ventas por")):
             return "ventasPorSucursal", {}
         if "temporada" in bajo:
@@ -278,6 +288,34 @@ class IAService:
             return {"por_sucursal": [
                 {"sucursal": n, "ventas": int(c), "ingresos": str(t)} for n, c, t in filas
             ], "total": len(filas)}
+        if funcion == "inventarioPorSucursal":
+            q = (
+                select(
+                    Sucursal.nombre,
+                    func.count(InventarioSucursal.variante_id),
+                    func.coalesce(func.sum(InventarioSucursal.disponible), 0),
+                    func.coalesce(func.sum(InventarioSucursal.reservado), 0),
+                    func.coalesce(func.sum(InventarioSucursal.en_transito), 0),
+                )
+                .join(InventarioSucursal, InventarioSucursal.sucursal_id == Sucursal.id)
+                .where(Sucursal.activa.is_(True))
+                .group_by(Sucursal.nombre)
+                .order_by(Sucursal.nombre)
+            )
+            filas = (await self.db.execute(q)).all()
+            return {
+                "inventario_por_sucursal": [
+                    {
+                        "sucursal": nombre,
+                        "variantes": int(variantes or 0),
+                        "disponible": int(disponible or 0),
+                        "reservado": int(reservado or 0),
+                        "en_transito": int(en_transito or 0),
+                    }
+                    for nombre, variantes, disponible, reservado, en_transito in filas
+                ],
+                "total": len(filas),
+            }
         if funcion == "ventasPorTemporada":
             from backend.app.models.catalogo import Temporada
 

@@ -178,17 +178,30 @@ class FakeStripe:
 
 
 def instalar_decart_falso(token: str = "tok-corto-prueba"):
-    """Mock de client.tokens.create(): sin red ni créditos. Retorna capturas."""
+    """Doble fiel al SDK (`client.tokens.create`): sin red ni créditos.
+
+    Imita `CreateTokenResponse` con atributos snake_case: `api_key`,
+    `expires_at`, `permissions` y `constraints`. Retorna capturas con los
+    parámetros contractuales (expires_in=60, lucy-2.5, maxSessionDuration=120).
+    """
     from datetime import datetime, timezone
 
     from backend.app.core import decart_client
 
     capturas: dict = {}
 
+    class _TokenSDK:
+        def __init__(self, api_key: str, expires_at):
+            self.api_key = api_key
+            self.expires_at = expires_at
+            self.permissions = {"models": ["lucy-2.5"]}
+            self.constraints = {"realtime": {"maxSessionDuration": 120}}
+
     async def _falso(correlation_id: str):
         capturas["correlation_id"] = correlation_id
         capturas["parametros"] = decart_client.parametros_token(correlation_id)
-        return token, datetime.now(timezone.utc) + timedelta(seconds=60)
+        expira = datetime.now(timezone.utc) + timedelta(seconds=60)
+        return _TokenSDK(token, expira)
 
     decart_client.fijar_creador_falso(_falso)
     return capturas
@@ -198,3 +211,16 @@ def desinstalar_decart_falso():
     from backend.app.core import decart_client
 
     decart_client.fijar_creador_falso(None)
+
+
+def instalar_validador_falso(modo: str = "ok"):
+    """Validador de imágenes sin red para pruebas (sintaxis real + modo)."""
+    from backend.app.core import decart_imagen as di
+
+    di.fijar_validador(di.ValidadorFalso(modo))
+
+
+def desinstalar_validador_falso():
+    from backend.app.core import decart_imagen as di
+
+    di.fijar_validador(None)

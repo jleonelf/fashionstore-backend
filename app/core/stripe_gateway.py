@@ -61,11 +61,17 @@ class FakeStripeGateway(StripeGateway):
     ) -> IntencionPago:
         import secrets as _secrets
 
+        # FAILED reutiliza el PI vigente; CANCELED exige uno nuevo porque un
+        # PI cancelado ya no puede procesar un pago (contrato Stripe).
         if referencia_existente and referencia_existente in self.intenciones:
-            return self.intenciones[referencia_existente]
-        if venta_id in self.por_venta:
+            vigente = self.intenciones[referencia_existente]
+            if vigente.estado != "CANCELED":
+                return vigente
+        elif venta_id in self.por_venta:
             pi_id = self.por_venta[venta_id]
-            return self.intenciones[pi_id]
+            vigente = self.intenciones.get(pi_id)
+            if vigente is not None and vigente.estado != "CANCELED":
+                return vigente
         # IDs globalmente únicos (como Stripe real): sin choques entre corridas.
         pi_id = f"pi_test_{_secrets.token_hex(4)}"
         inten = IntencionPago(
@@ -136,6 +142,41 @@ def fijar_gateway(gateway: Optional[StripeGateway]) -> None:
     _gateway_actual = gateway
 
 
+def es_clave_test_mode(clave: str) -> bool:
+    """True solo para claves de Test Mode (sk_test_/rk_test_)."""
+    c = (clave or "").strip()
+    return c.startswith("sk_test_") or c.startswith("rk_test_")
+
+
+def es_clave_live(clave: str) -> bool:
+    c = (clave or "").strip()
+    return c.startswith("sk_live_") or c.startswith("rk_live_")
+
+
+def exigir_test_mode() -> None:
+    """Rechaza claves live o fuera de Test Mode sin exponer la clave.
+
+    Nunca imprime la clave ni su prefijo completo en errores o logs.
+    """
+    clave = settings.STRIPE_SECRET_KEY or ""
+    if es_clave_live(clave):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "codigo": "STRIPE_MODO_NO_PERMITIDO",
+                "mensaje": "Pasarela solo en Test Mode; clave live no permitida",
+            },
+        )
+    if not es_clave_test_mode(clave):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "codigo": "STRIPE_MODO_NO_PERMITIDO",
+                "mensaje": "Pasarela solo en Test Mode; configure una clave de prueba",
+            },
+        )
+
+
 def obtener_gateway() -> StripeGateway:
     """503 tipado si Stripe está deshabilitado o sin claves (módulos sanos)."""
     if _gateway_actual is not None:
@@ -149,6 +190,7 @@ def obtener_gateway() -> StripeGateway:
                 "Configure STRIPE_SECRET_KEY y STRIPE_ENABLED=true en backend/.env",
             },
         )
+    exigir_test_mode()
     return _StripeReal()
 
 

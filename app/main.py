@@ -58,7 +58,8 @@ async def verificar_salud():
     return {
         "estado": "operativo",
         "servicio": settings.PROJECT_NAME,
-        "version": settings.VERSION
+        "version": settings.VERSION,
+        "zona_horaria_negocio": settings.BUSINESS_TIMEZONE,
     }
 
 if __name__ == "__main__":

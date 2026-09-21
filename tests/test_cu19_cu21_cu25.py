@@ -61,7 +61,11 @@ async def test_dashboard_importes_conocidos_y_rbac(cliente_http: AsyncClient):
         await enc.client.aclose()
 
 
-async def test_cu21_reporte_funcion_cerrada_y_auditoria(cliente_http: AsyncClient):
+async def test_cu21_reporte_funcion_cerrada_y_auditoria(
+    cliente_http: AsyncClient, monkeypatch: pytest.MonkeyPatch
+):
+    # Las pruebas nunca consumen Gemini real, aunque el entorno local tenga clave.
+    monkeypatch.setattr(settings, "GEMINI_API_KEY", "")
     admin = cliente_http
     suc = await sucursal_semilla(admin)
     var = await crear_variante_con_stock(admin, suc, 6, tag="rep", precio="100.00", costo="40.00")
@@ -76,6 +80,18 @@ async def test_cu21_reporte_funcion_cerrada_y_auditoria(cliente_http: AsyncClien
             "topVendidos", "efectividadReservas", "rotacionPorTemporada"), dto
         assert isinstance(dto["datos"], dict) and dto["narrativa"], dto
         assert dto["proveedor"] == "DETERMINISTA"
+        inventario = await admin.post(
+            "/api/v1/ia/reportes",
+            json={"consulta": "inventario por sucursal"},
+        )
+        assert inventario.status_code == 200, inventario.text
+        reporte_inventario = inventario.json()
+        assert reporte_inventario["funcion_usada"] == "inventarioPorSucursal"
+        assert reporte_inventario["datos"]["inventario_por_sucursal"], reporte_inventario
+        assert any(
+            fila["disponible"] >= 6
+            for fila in reporte_inventario["datos"]["inventario_por_sucursal"]
+        )
         # Cliente no puede pedir reportes -> 403.
         assert (await cli.client.post("/api/v1/ia/reportes",
                                       json={"consulta": "ventas"})).status_code == 403

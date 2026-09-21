@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.repositories.inventario_repository import InventarioRepository
 from backend.app.repositories.movimiento_repository import MovimientoRepository
 from backend.app.repositories.variante_repository import VarianteRepository
+from backend.app.core.reloj import a_hora_bolivia, entrada_local_a_utc
 
 class InventarioService:
     """
@@ -63,6 +64,8 @@ class InventarioService:
             variante = await self.variante_repo.buscarPorId(variante_id)
             if not variante:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Variante no encontrada")
+        desde = entrada_local_a_utc(desde) if desde is not None else None
+        hasta = entrada_local_a_utc(hasta) if hasta is not None else None
         movimientos = await self.movimiento_repo.listar(
             variante_id=variante_id,
             sucursal_id=sucursal_id,
@@ -86,7 +89,7 @@ class InventarioService:
                 "costo_unitario": float(m.costo_unitario) if m.costo_unitario is not None else 0.0,
                 "referencia_tipo": m.referencia_tipo,
                 "referencia_id": str(m.referencia_id) if m.referencia_id else None,
-                "fecha_hora": m.fecha_hora.isoformat() if m.fecha_hora else None,
+                "fecha_hora": a_hora_bolivia(m.fecha_hora).isoformat() if m.fecha_hora else None,
                 "observacion": m.observacion,
             })
         return out
@@ -117,7 +120,7 @@ class InventarioService:
             "costo_unitario": float(mov.costo_unitario) if mov.costo_unitario is not None else 0.0,
             "referencia_tipo": mov.referencia_tipo,
             "referencia_id": str(mov.referencia_id) if mov.referencia_id else None,
-            "fecha_hora": mov.fecha_hora.isoformat() if mov.fecha_hora else None,
+            "fecha_hora": a_hora_bolivia(mov.fecha_hora).isoformat() if mov.fecha_hora else None,
             "observacion": mov.observacion,
         }
 

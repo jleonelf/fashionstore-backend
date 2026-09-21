@@ -22,7 +22,13 @@ from sqlalchemy.exc import IntegrityError
 
 from backend.app.core.database import AsyncSessionLocal
 from backend.app.core import reloj as reloj_mod
-from backend.app.core.reloj import RelojFijo, calcular_vencimiento, vencida
+from backend.app.core.reloj import (
+    RelojFijo,
+    a_hora_bolivia,
+    calcular_vencimiento,
+    entrada_local_a_utc,
+    vencida,
+)
 from backend.app.core.idempotencia import (
     hash_payload,
     resolver_idempotencia,
@@ -565,3 +571,24 @@ async def test_sucursal_adelanto_coherente():
             fila.modalidad_adelanto,
             fila.valor_adelanto,
         ) == estado_original
+
+
+def test_fecha_sin_offset_se_interpreta_como_hora_boliviana():
+    local = datetime(2026, 9, 19, 14, 30, 0)
+    utc = entrada_local_a_utc(local)
+    assert utc == datetime(2026, 9, 19, 18, 30, 0, tzinfo=timezone.utc)
+
+
+def test_fecha_con_offset_respeta_el_instante_y_presenta_bolivia():
+    instante = datetime(2026, 9, 19, 18, 30, 0, tzinfo=timezone.utc)
+    local = a_hora_bolivia(instante)
+    assert local.isoformat() == "2026-09-19T14:30:00-04:00"
+    assert entrada_local_a_utc(local) == instante
+
+
+async def test_sesion_postgresql_usa_zona_horaria_boliviana():
+    from sqlalchemy import text
+
+    async with AsyncSessionLocal() as db:
+        zona = (await db.execute(text("SHOW TIME ZONE"))).scalar_one()
+    assert zona == "America/La_Paz"

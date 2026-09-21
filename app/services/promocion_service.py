@@ -15,7 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.core.permisos import es_admin
-from backend.app.core.reloj import RelojSistema
+from backend.app.core.reloj import RelojSistema, entrada_local_a_utc
 from backend.app.models.ciclo3 import Promocion
 from backend.app.models.seguridad import Usuario
 from backend.app.repositories.ciclo3_repository import PromocionRepository
@@ -67,7 +67,9 @@ class PromocionService:
 
     async def crear(self, usuario: Usuario, dto: PromocionCrearDTO) -> PromocionDTO:
         self._exigir_admin(usuario)
-        self._validar_vigencia(dto.vigencia_inicio, dto.vigencia_fin)
+        inicio = entrada_local_a_utc(dto.vigencia_inicio) if dto.vigencia_inicio else None
+        fin = entrada_local_a_utc(dto.vigencia_fin) if dto.vigencia_fin else None
+        self._validar_vigencia(inicio, fin)
         self._validar_valor(dto.tipo, dto.valor)
         if await self.repo.buscarPorCodigo(dto.codigo) is not None:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Código de promoción duplicado")
@@ -78,7 +80,7 @@ class PromocionService:
             promo = Promocion(
                 codigo=dto.codigo, nombre=dto.nombre, descripcion=dto.descripcion,
                 tipo=dto.tipo, valor=dto.valor, activa=dto.activa,
-                vigencia_inicio=dto.vigencia_inicio, vigencia_fin=dto.vigencia_fin,
+                vigencia_inicio=inicio, vigencia_fin=fin,
                 creada_por=usuario.id,
             )
             await self.repo.crear(promo)
@@ -96,20 +98,20 @@ class PromocionService:
         if promo is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Promoción no encontrada")
         try:
-            if dto.nombre is not None:
+            if "nombre" in dto.model_fields_set and dto.nombre is not None:
                 promo.nombre = dto.nombre
-            if dto.descripcion is not None:
-                promo.descripcion = dto.descripcion
-            if dto.tipo is not None:
+            if "descripcion" in dto.model_fields_set:
+                promo.descripcion = dto.descripcion.strip() if dto.descripcion and dto.descripcion.strip() else None
+            if "tipo" in dto.model_fields_set and dto.tipo is not None:
                 promo.tipo = dto.tipo
-            if dto.valor is not None:
+            if "valor" in dto.model_fields_set and dto.valor is not None:
                 promo.valor = dto.valor
-            if dto.activa is not None:
+            if "activa" in dto.model_fields_set and dto.activa is not None:
                 promo.activa = dto.activa
-            if dto.vigencia_inicio is not None:
-                promo.vigencia_inicio = dto.vigencia_inicio
-            if dto.vigencia_fin is not None:
-                promo.vigencia_fin = dto.vigencia_fin
+            if "vigencia_inicio" in dto.model_fields_set:
+                promo.vigencia_inicio = entrada_local_a_utc(dto.vigencia_inicio) if dto.vigencia_inicio else None
+            if "vigencia_fin" in dto.model_fields_set:
+                promo.vigencia_fin = entrada_local_a_utc(dto.vigencia_fin) if dto.vigencia_fin else None
             self._validar_vigencia(promo.vigencia_inicio, promo.vigencia_fin)
             self._validar_valor(promo.tipo, Decimal(str(promo.valor)))
             await self.db.flush()

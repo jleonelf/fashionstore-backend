@@ -8,6 +8,9 @@ from backend.app.core.dependencias import get_usuario_actual
 from backend.app.models.seguridad import Usuario
 from backend.app.schemas.pago_stripe import CotizacionDTO, PedidoDTO, PedidoListaDTO, TransicionPedidoDTO
 from backend.app.services.entrega_service import EntregaService
+from backend.app.api.v1.endpoints._errores import (
+    E400, E401, E403, E404, E409_NEGOCIO,
+)
 
 router = APIRouter()
 
@@ -17,6 +20,7 @@ router = APIRouter()
     summary="Cotizar delivery sin persistencia (CU16)",
     description="Fórmula: tarifa_base + abs(anillo_destino - anillo_sucursal) * incremento. "
     "Valida rango de anillos y delivery activo.",
+    responses={400: E400, 401: E401, 404: E404, 409: E409_NEGOCIO},
 )
 async def cotizar(
     sucursal_id: uuid.UUID,
@@ -29,6 +33,7 @@ async def cotizar(
 
 @router.get(
     "/mis-pedidos", response_model=PedidoListaDTO, summary="Mis pedidos de entrega (CU16)",
+    responses={401: E401, 403: E403},
 )
 async def misPedidos(
     limit: int = Query(50, ge=1, le=100),
@@ -42,6 +47,7 @@ async def misPedidos(
 @router.get(
     "/cola", response_model=PedidoListaDTO, summary="Cola operativa por sucursal (CU16)",
     description="Paginada y filtrada por sucursal. RBAC: ADMIN global; ENCARGADO/CAJERO su sucursal.",
+    responses={400: E400, 401: E401, 403: E403},
 )
 async def colaOperativa(
     sucursal_id: Optional[uuid.UUID] = Query(None),
@@ -56,6 +62,7 @@ async def colaOperativa(
 
 @router.get(
     "/{pedido_id}", response_model=PedidoDTO, summary="Consultar pedido (CU16)",
+    responses={401: E401, 403: E403, 404: E404},
 )
 async def obtenerPedido(
     pedido_id: uuid.UUID,
@@ -69,7 +76,8 @@ async def obtenerPedido(
     "/{pedido_id}/estado", response_model=PedidoDTO, summary="Avanzar estado del pedido (CU16)",
     description="Recojo: SOLICITADO→PREPARADO→LISTO_RECOJO→RECOGIDO. "
     "Delivery: SOLICITADO→PREPARADO→EN_REPARTO→ENTREGADO. Secuencial; repetición idempotente. "
-    "Solo pedidos pagados entran a preparación.",
+    "Solo pedidos pagados entran a preparación. RBAC operativo por sucursal.",
+    responses={401: E401, 403: E403, 404: E404, 409: E409_NEGOCIO},
 )
 async def transicionarPedido(
     pedido_id: uuid.UUID,
@@ -82,8 +90,10 @@ async def transicionarPedido(
 
 @router.post(
     "/{pedido_id}/cancelar", response_model=PedidoDTO, summary="Cancelar pedido (CU16)",
-    description="Solo en SOLICITADO con venta PENDIENTE_PAGO (libera el compromiso una vez). "
-    "Pedidos pagados usan devolución (CU12).",
+    description="RBAC: solo cliente propietario (si el estado lo permite), ENCARGADO/CAJERO de la "
+    "sucursal o ADMINISTRADOR; proveedor u otro rol 403 sin mutación. Solo en SOLICITADO con venta "
+    "PENDIENTE_PAGO (libera el compromiso una vez). Pedidos pagados usan devolución (CU12).",
+    responses={401: E401, 403: E403, 404: E404, 409: E409_NEGOCIO},
 )
 async def cancelarPedido(
     pedido_id: uuid.UUID,

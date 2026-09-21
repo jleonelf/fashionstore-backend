@@ -274,21 +274,27 @@ class SolicitudIA(Base):
 class RegistroIdempotencia(Base):
     """comercial.registros_idempotencia — idempotencia genérica Ciclo 3.
 
-    Cubre operaciones sin columna propia (líneas de carrito, autorizaciones
-    Decart, cotizaciones auditadas): misma clave + mismo hash -> respuesta
-    original; misma clave + distinto hash -> 409. Las ventas/pagos ya tienen
-    su propia clave_idempotencia y no usan esta tabla.
+    Ámbito aislado por (clave, usuario_id, recurso_tipo, operacion): misma
+    clave de otro usuario nunca devuelve datos ajenos. Cubre operaciones sin
+    columna propia (líneas de carrito, autorizaciones Decart): misma clave +
+    mismo usuario + misma operación + mismo hash -> respuesta original; misma
+    clave + mismo usuario + distinta operación/payload -> 409. Las
+    ventas/pagos conservan su propia clave_idempotencia y verifican
+    propiedad en servicio. Ver migración 0005_ciclo3_correcciones.
     """
 
     __tablename__ = "registros_idempotencia"
     __table_args__ = (
         Index("idx_idempotencia_expira", "expira_en"),
+        Index("idx_idempotencia_usuario_expira", "usuario_id", "expira_en"),
         {"schema": "comercial"},
     )
 
     clave = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    usuario_id = Column(UUID(as_uuid=True), primary_key=True, nullable=False)
+    recurso_tipo = Column(String(40), primary_key=True, nullable=False)
+    operacion = Column(String(80), primary_key=True, nullable=False)
     hash_solicitud = Column(Text, nullable=False)
-    recurso_tipo = Column(String(40), nullable=False)
     recurso_id = Column(UUID(as_uuid=True), nullable=True)
     respuesta = Column(JSONB, nullable=False, default=dict)
     creada_en = Column(DateTime(timezone=True), default=_ahora_utc, nullable=False)

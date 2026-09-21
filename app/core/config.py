@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     POSTGRES_USER: str = os.getenv("POSTGRES_USER", "postgres")
     POSTGRES_PASSWORD: str = os.getenv("POSTGRES_PASSWORD", "postgres")
     POSTGRES_DB: str = os.getenv("POSTGRES_DB", "fashionstore_db")
+    # Zona horaria oficial del negocio. La persistencia conserva instantes en
+    # timestamptz; PostgreSQL presenta now() y consultas manuales en esta zona.
+    BUSINESS_TIMEZONE: str = os.getenv("BUSINESS_TIMEZONE", "America/La_Paz")
 
     # JWT Security
     SECRET_KEY: str = os.getenv("SECRET_KEY", "fashionstore_super_secret_jwt_key_si2_2026")
@@ -37,6 +40,12 @@ class Settings(BaseSettings):
     DECART_TOKEN_TTL_SECONDS: int = int(os.getenv("DECART_TOKEN_TTL_SECONDS", "60"))
     DECART_SESSION_MAX_SECONDS: int = int(os.getenv("DECART_SESSION_MAX_SECONDS", "120"))
     DECART_RATE_LIMIT_POR_MINUTO: int = int(os.getenv("DECART_RATE_LIMIT_POR_MINUTO", "10"))
+    # Allowlist de orígenes de imagen del probador (vacía hasta que el
+    # usuario configure dominios). Sin allowlist la autorización falla de
+    # forma controlada sin afectar catálogo, carrito ni reservas.
+    DECART_ORIGENES_PERMITIDOS: str = os.getenv("DECART_ORIGENES_PERMITIDOS", "")
+    DECART_IMAGEN_MAX_MB: int = int(os.getenv("DECART_IMAGEN_MAX_MB", "5"))
+    DECART_IMAGEN_TIMEOUT_SEGUNDOS: int = int(os.getenv("DECART_IMAGEN_TIMEOUT_SEGUNDOS", "8"))
 
     # Ciclo 3 — IA (Gemini opcional; sin clave rige fallback determinista).
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")

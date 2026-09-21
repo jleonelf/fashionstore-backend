@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from backend.app.core.reloj import utcnow
 from sqlalchemy import Column, String, Text, Boolean, SmallInteger, Integer, Numeric, ForeignKey, Date, DateTime, UniqueConstraint, PrimaryKeyConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -91,8 +91,8 @@ class Producto(Base):
     marca = Column(String(100), nullable=True)
     precio_base = Column(Numeric(12, 2), nullable=False, default=0)
     activo = Column(Boolean, nullable=False, default=True)
-    creado_en = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=False)
-    actualizado_en = Column(DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    creado_en = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    actualizado_en = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
     categoria = relationship("Categoria", back_populates="productos")
     proveedor_principal = relationship("Proveedor", back_populates="productos")

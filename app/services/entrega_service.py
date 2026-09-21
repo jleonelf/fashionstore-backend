@@ -10,12 +10,14 @@ SOLICITADO; pagadas usan devolución CU12). Sin empresa de delivery real.
 """
 import uuid
 from decimal import Decimal, ROUND_HALF_UP
-from typing import Optional
+from typing import Any, Optional, Tuple
 
 from fastapi import HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.core.permisos import es_admin, exigir_sucursal, rol_de
+from backend.app.models.comercial import Venta
 from backend.app.models.seguridad import Usuario
 from backend.app.repositories.ciclo3_repository import PedidoRepository
 from backend.app.repositories.sucursal_repository import SucursalRepository
@@ -64,8 +66,70 @@ class EntregaService:
             costo_entrega=costo_delivery(base, incr, anillo_suc, anillo_destino),
         )
 
-    def _a_dto(self, pedido) -> PedidoDTO:
-        return PedidoDTO.model_validate(pedido)
+    def _calcular_capacidades(
+        self, pedido, usuario: Optional[Usuario] = None, venta: Optional[Any] = None
+    ) -> Tuple[bool, bool, Optional[str]]:
+        if usuario is None:
+            return False, False, None
+
+        admin = es_admin(usuario)
+        rol = rol_de(usuario)
+        es_duenio = (rol == "CLIENTE" and pedido.cliente_id == usuario.id)
+        propia_suc = (
+            usuario.empleado.sucursal_id
+            if getattr(usuario, "empleado", None) is not None
+            else None
+        )
+        es_operativo_sucursal = (
+            rol in ("ENCARGADO", "CAJERO") and propia_suc is not None and propia_suc == pedido.sucursal_id
+        )
+
+        estado_v = None
+        if venta is not None:
+            estado_v = venta.estado if isinstance(venta.estado, str) else getattr(venta.estado, "name", str(venta.estado))
+
+        # puede_cancelar: Solo en SOLICITADO con venta PENDIENTE_PAGO
+        # Si la venta está PAGADA o no es el estado permitido, no se puede cancelar
+        autorizado_cancelar = admin or es_duenio or es_operativo_sucursal
+        puede_cancelar = (
+            autorizado_cancelar
+            and pedido.estado == "SOLICITADO"
+            and estado_v == "PENDIENTE_PAGO"
+        )
+
+        # puede_transicionar y siguiente_estado:
+        # Para CLIENTE nunca se expone transición operativa
+        # ENCARGADO y CAJERO solo ven capacidades de su sucursal
+        # ADMINISTRADOR conserva alcance global
+        puede_transicionar = False
+        siguiente_estado = None
+
+        autorizado_operar = admin or es_operativo_sucursal
+        if autorizado_operar:
+            flujo = RECOJO_FLUJO if pedido.modalidad == "RECOJO" else DELIVERY_FLUJO
+            if pedido.estado in flujo:
+                idx = flujo.index(pedido.estado)
+                if idx + 1 < len(flujo):
+                    candidato = flujo[idx + 1]
+                    if pedido.estado == "SOLICITADO" and candidato == "PREPARADO":
+                        if estado_v == "PAGADA":
+                            puede_transicionar = True
+                            siguiente_estado = candidato
+                    else:
+                        puede_transicionar = True
+                        siguiente_estado = candidato
+
+        return puede_cancelar, puede_transicionar, siguiente_estado
+
+    def _a_dto(
+        self, pedido, usuario: Optional[Usuario] = None, venta: Optional[Any] = None
+    ) -> PedidoDTO:
+        dto = PedidoDTO.model_validate(pedido)
+        p_canc, p_trans, sig = self._calcular_capacidades(pedido, usuario, venta)
+        dto.puede_cancelar = p_canc
+        dto.puede_transicionar = p_trans
+        dto.siguiente_estado = sig
+        return dto
 
     def _autorizar_cola(self, usuario: Usuario, sucursal_id: Optional[uuid.UUID]) -> None:
         if es_admin(usuario):
@@ -98,15 +162,22 @@ class EntregaService:
         if rol_de(usuario) != "CLIENTE":
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo el Cliente consulta sus pedidos")
         items, total = await self.pedido_repo.pedidosDeCliente(usuario.id, limit=limit, offset=offset)
+        ventas_map = {}
+        if items:
+            v_ids = [p.venta_id for p in items]
+            res = await self.db.execute(select(Venta).where(Venta.id.in_(v_ids)))
+            for v in res.scalars().all():
+                ventas_map[v.id] = v
         return {"total": total, "limit": limit, "offset": offset,
-                "items": [self._a_dto(p) for p in items]}
+                "items": [self._a_dto(p, usuario=usuario, venta=ventas_map.get(p.venta_id)) for p in items]}
 
     async def obtener(self, usuario: Usuario, pedido_id: uuid.UUID) -> PedidoDTO:
         pedido = await self.pedido_repo.buscarPorId(pedido_id)
         if pedido is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pedido no encontrado")
         self._autorizar_pedido(usuario, pedido)
-        return self._a_dto(pedido)
+        venta = await self.venta_repo.buscarPorId(pedido.venta_id)
+        return self._a_dto(pedido, usuario=usuario, venta=venta)
 
     async def cola(
         self, usuario: Usuario, sucursal_id: Optional[uuid.UUID] = None,
@@ -116,8 +187,14 @@ class EntregaService:
         items, total = await self.pedido_repo.cola(
             sucursal_id=sucursal_id, estado=estado, limit=limit, offset=offset
         )
+        ventas_map = {}
+        if items:
+            v_ids = [p.venta_id for p in items]
+            res = await self.db.execute(select(Venta).where(Venta.id.in_(v_ids)))
+            for v in res.scalars().all():
+                ventas_map[v.id] = v
         return {"total": total, "limit": limit, "offset": offset,
-                "items": [self._a_dto(p) for p in items]}
+                "items": [self._a_dto(p, usuario=usuario, venta=ventas_map.get(p.venta_id)) for p in items]}
 
     async def transicionar(self, usuario: Usuario, pedido_id: uuid.UUID, destino: str) -> PedidoDTO:
         pedido = await self.pedido_repo.buscarPorId(pedido_id)
@@ -128,8 +205,9 @@ class EntregaService:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Solo personal operativo")
         if not es_admin(usuario):
             exigir_sucursal(usuario, pedido.sucursal_id)
+        venta = await self.venta_repo.buscarPorId(pedido.venta_id)
         if destino == pedido.estado:
-            return self._a_dto(pedido)  # idempotente
+            return self._a_dto(pedido, usuario=usuario, venta=venta)  # idempotente
         flujo = RECOJO_FLUJO if pedido.modalidad == "RECOJO" else DELIVERY_FLUJO
         if destino == "CANCELADO":
             return await self.cancelar(usuario, pedido_id)
@@ -145,7 +223,6 @@ class EntregaService:
                 detail=f"Transición no secuencial: {pedido.estado} -> {destino}",
             )
         if pedido.estado == "SOLICITADO" and destino == "PREPARADO":
-            venta = await self.venta_repo.buscarPorId(pedido.venta_id)
             estado_v = venta.estado if isinstance(venta.estado, str) else venta.estado.name
             if estado_v != "PAGADA":
                 raise HTTPException(
@@ -156,7 +233,7 @@ class EntregaService:
             pedido.estado = destino
             await self.db.flush()
             await self.db.commit()
-            return self._a_dto(pedido)
+            return self._a_dto(pedido, usuario=usuario, venta=venta)
         except Exception:
             await self.db.rollback()
             raise
@@ -165,16 +242,31 @@ class EntregaService:
         pedido = await self.pedido_repo.buscarPorId(pedido_id)
         if pedido is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pedido no encontrado")
-        rol = rol_de(usuario)
-        if rol == "CLIENTE" and pedido.cliente_id != usuario.id:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Pedido de otro cliente")
-        if rol in ("ENCARGADO", "CAJERO") and not es_admin(usuario):
-            exigir_sucursal(usuario, pedido.sucursal_id)
+        # RBAC estricto: solo propietario, ENCARGADO/CAJERO de la sucursal o
+        # ADMINISTRADOR. Proveedor o cualquier rol futuro no reconocido -> 403
+        # sin mutación alguna.
+        if es_admin(usuario):
+            pass
+        else:
+            rol = rol_de(usuario)
+            if rol == "CLIENTE":
+                if pedido.cliente_id != usuario.id:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Pedido de otro cliente",
+                    )
+            elif rol in ("ENCARGADO", "CAJERO"):
+                exigir_sucursal(usuario, pedido.sucursal_id)
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Rol no autorizado para cancelar pedidos",
+                )
+        venta = await self.venta_repo.buscarPorId(pedido.venta_id)
         if pedido.estado in ("RECOGIDO", "ENTREGADO", "CANCELADO"):
             if pedido.estado == "CANCELADO":
-                return self._a_dto(pedido)
+                return self._a_dto(pedido, usuario=usuario, venta=venta)
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Pedido ya finalizado")
-        venta = await self.venta_repo.buscarPorId(pedido.venta_id)
         estado_v = venta.estado if isinstance(venta.estado, str) else venta.estado.name
         if estado_v == "PAGADA":
             raise HTTPException(
@@ -201,7 +293,7 @@ class EntregaService:
                     status_code=status.HTTP_409_CONFLICT,
                     detail="No se pudo cancelar el pedido",
                 )
-            return self._a_dto(pedido)
+            return self._a_dto(pedido, usuario=usuario, venta=venta)
         except HTTPException:
             await self.db.rollback()
             raise
