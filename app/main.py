@@ -90,6 +90,25 @@ async def verificar_salud():
         "zona_horaria_negocio": settings.BUSINESS_TIMEZONE,
     }
 
+@app.get(f"{settings.API_V1_STR}/debug-db", tags=["Salud"])
+async def debug_db():
+    from backend.app.core.database import AsyncSessionLocal
+    from sqlalchemy import text
+    try:
+        async with AsyncSessionLocal() as session:
+            res = await session.execute(text(
+                "SELECT conname, pg_get_constraintdef(c.oid) "
+                "FROM pg_constraint c "
+                "WHERE conrelid = 'inventario.movimientos_inventario'::regclass;"
+            ))
+            constraints = {row[0]: row[1] for row in res}
+            return {
+                "version": "debug-ciclo3-v3",
+                "constraints": constraints,
+            }
+    except Exception as e:
+        return {"error": str(e)}
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("backend.app.main:app", host="0.0.0.0", port=8000, reload=True)

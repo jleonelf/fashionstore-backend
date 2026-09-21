@@ -149,5 +149,15 @@ async def checkout(
     clave_idempotencia: Optional[str] = Header(None, alias="Idempotency-Key"),
 ) -> CheckoutRespuestaDTO:
     clave = validar_clave_idempotencia(clave_idempotencia)
-    dto, _ = await CarritoService(db).checkout(usuario, datos, _canal(canal), clave)
-    return dto
+    try:
+        dto, _ = await CarritoService(db).checkout(usuario, datos, _canal(canal), clave)
+        return dto
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error en checkout: {type(e).__name__}: {str(e)}"
+        )
