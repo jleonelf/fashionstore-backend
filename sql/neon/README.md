@@ -8,6 +8,8 @@ Ejecutar los archivos en orden desde Neon SQL Editor:
 4. `02_reset_semilla_oficial_ciclo2.sql` — destructivo para datos de negocio.
 5. `03_verificacion_ciclo2.sql` — solo lectura; debe terminar sin excepciones.
 6. `04_esquema_ciclo3.sql` — agrega las tablas y restricciones de Ciclo 3 sin borrar datos.
+   Si ese archivo se ejecutÃ³ antes de la correcciÃ³n de compatibilidad, ejecutar una vez
+   `04a_corregir_estado_pedidos_ciclo3.sql` antes de la semilla.
 7. `05_semilla_ciclo3.sql` — agrega promociones, carrito, navegacion y ventas historicas.
 8. `06_verificacion_ciclo3.sql` — solo lectura; debe terminar con `SEMILLA_CICLO3_OK`.
 
