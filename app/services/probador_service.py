@@ -35,6 +35,7 @@ from backend.app.schemas.probador_ia import (
 CATEGORIAS_SUPERIORES = frozenset({
     "CAMISA", "CAMISAS", "BLUSA", "BLUSAS", "POLERA", "POLERAS", "REMERA",
     "CHAQUETA", "CHAMARRA", "SACO", "ABRIGO", "CHALECO", "SUDADERA", "TOP",
+    "BLAZER", "BLAZERS",
 })
 PROMPT_PRENDA = (
     "Replace only the current top with the referenced garment, preserving its "
@@ -85,7 +86,8 @@ class ProbadorService:
         q = (
             select(VarianteProducto)
             .options(
-                selectinload(VarianteProducto.producto).selectinload(Producto.categoria)
+                selectinload(VarianteProducto.producto).selectinload(Producto.categoria),
+                selectinload(VarianteProducto.producto).selectinload(Producto.imagenes),
             )
             .where(VarianteProducto.id == variante_id)
         )
@@ -106,9 +108,19 @@ class ProbadorService:
             )
         recurso = (variante.recurso_prueba_virtual or "").strip()
         if not recurso:
+            # Contrato móvil CU17: si la variante no tiene un recurso propio,
+            # Decart utiliza exclusivamente la primera foto real del producto.
+            # La principal ocupa la primera posición; luego se respeta `orden`.
+            imagenes = sorted(
+                producto.imagenes or [],
+                key=lambda img: (not bool(img.es_principal), img.orden, str(img.id)),
+            )
+            if imagenes:
+                recurso = (imagenes[0].enlace_imagen or "").strip()
+        if not recurso:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Variante sin recurso de prueba virtual",
+                detail="Variante sin una primera imagen compatible con el probador",
             )
         # Imagen frontal/recurso de catálogo: validación segura inyectable
         # (HTTPS, allowlist, sin internos, sin redirecciones inseguras,
