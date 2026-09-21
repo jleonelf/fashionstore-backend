@@ -1,7 +1,7 @@
 """Presentación Carrito y checkout — CU14 (RF14, RF15, RF16)."""
 import uuid
 from typing import Optional
-from fastapi import APIRouter, Depends, Header, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.core.database import get_db
 from backend.app.core.dependencias import get_usuario_actual
