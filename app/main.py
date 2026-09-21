@@ -16,6 +16,30 @@ from backend.app.api.v1.api import api_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Asegurar compatibilidad de restricciones de Ciclo 3 en la base de datos (Neon / local)
+    try:
+        from backend.app.core.database import AsyncSessionLocal
+        from sqlalchemy import text
+        async with AsyncSessionLocal() as db_init:
+            await db_init.execute(text(
+                "ALTER TABLE inventario.movimientos_inventario "
+                "DROP CONSTRAINT IF EXISTS movimientos_inventario_tipo_check;"
+            ))
+            await db_init.execute(text(
+                "ALTER TABLE inventario.movimientos_inventario "
+                "ADD CONSTRAINT movimientos_inventario_tipo_check CHECK ("
+                "  tipo IN ("
+                "    'RECEPCION_PROVEEDOR','RESERVA','LIBERACION_RESERVA',"
+                "    'COMPROMISO_TRASLADO','DESPACHO_TRASLADO','RECEPCION_TRASLADO',"
+                "    'VENTA_PRESENCIAL','VENTA_DIGITAL','DEVOLUCION','MERMA','AJUSTE',"
+                "    'COMPROMISO_DIGITAL','LIBERACION_DIGITAL'"
+                "  )"
+                ");"
+            ))
+            await db_init.commit()
+    except Exception:
+        pass
+
     if settings.EXPIRACION_JOB_ACTIVO:
         from backend.app.core.tareas import iniciar_scheduler
 
