@@ -37,8 +37,10 @@ async def lifespan(app: FastAPI):
                 ");"
             ))
             await db_init.commit()
-    except Exception:
-        pass
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print("ERROR EN LIFESPAN MIGRACION:", e)
 
     if settings.EXPIRACION_JOB_ACTIVO:
         from backend.app.core.tareas import iniciar_scheduler
@@ -75,7 +77,9 @@ app.include_router(api_router, prefix=settings.API_V1_STR)
 
 @app.exception_handler(Exception)
 async def error_interno_no_controlado(request: Request, exc: Exception):
-    return JSONResponse(status_code=500, content={"detail": "Error interno del servidor"})
+    import traceback
+    traceback.print_exc()
+    return JSONResponse(status_code=500, content={"detail": f"Error interno: {type(exc).__name__}: {str(exc)}"})
 
 @app.get("/health", tags=["Salud"])
 async def verificar_salud():
